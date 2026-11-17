@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chatshelf</title>
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    window.CSM_TOKEN = "__TOKEN__";
+    (function () {
+      var pref = localStorage.getItem('csm-theme') || 'system';
+      var dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      var root = document.documentElement;
+      root.dataset.theme = dark ? 'dark' : 'light';
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.classList.add('motion');
+    })();
+  </script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2"/><path d="M3 7v10a2 2 0 0 0 2 2h7M15 17h6m-3-3 3 3-3 3"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4Z"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14m-6-6 6 6 6-6"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17l-6-4-6 4Z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0Zm5 9v4"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></symbol>
+  </svg>
+
+  <div class="shell">
+    <aside class="side" aria-label="Main">
+      <div class="logo">
+        <span class="mark" aria-hidden="true">&gt;_</span>
+        <span class="logo-name">Chatshelf</span>
+      </div>
+
+      <button type="button" class="side-search" data-palette>
+        <svg class="ic"><use href="#i-search"/></svg>
+        <span>Search or jump to…</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+
+      <nav class="nav" aria-label="Views">
+        <button type="button" class="nav-item" data-view="overview"><svg class="ic"><use href="#i-grid"/></svg>Overview</button>
+        <button type="button" class="nav-item" data-view="sessions"><svg class="ic"><use href="#i-chat"/></svg>Sessions <span id="navSessions" class="nav-count"></span></button>
+        <button type="button" class="nav-item" data-view="bookmarks"><svg class="ic"><use href="#i-bookmark"/></svg>Bookmarks <span id="navBookmarks" class="nav-count"></span></button>
+        <button type="button" class="nav-item" data-view="projects"><svg class="ic"><use href="#i-folder"/></svg>Projects <span id="navMissing" class="nav-count danger" hidden></span></button>
+        <button type="button" class="nav-item" data-view="backups"><svg class="ic"><use href="#i-archive"/></svg>Backups</button>
+      </nav>
+
+      <div id="sidePinned" class="side-pinned" hidden>
+        <p class="eyebrow side-label">Bookmarked chats</p>
+        <div id="sidePinnedList"></div>
+      </div>
+
+      <div class="side-foot">
+        <div class="theme" role="group" aria-label="Theme">
+          <button type="button" data-theme-set="light" aria-pressed="false"><svg class="ic"><use href="#i-sun"/></svg><span>Light</span></button>
+          <button type="button" data-theme-set="dark" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg><span>Dark</span></button>
+          <button type="button" data-theme-set="system" aria-pressed="false"><svg class="ic"><use href="#i-monitor"/></svg><span>Auto</span></button>
+        </div>
+        <button type="button" class="btn ghost full side-tools" data-sources><svg class="ic"><use href="#i-plug"/></svg><span>Tools &amp; import</span><span id="toolCount" class="nav-count"></span></button>
+        <div class="gh-row">
+          <a class="btn ghost gh-star" id="ghStar" href="https://github.com/heyKhoaiz/chatshelf" target="_blank" rel="noopener noreferrer" aria-label="Star Chatshelf on GitHub">
+            <svg class="ic"><use href="#i-star"/></svg><span>Star on GitHub</span><span class="gh-count" id="ghCount" hidden></span>
+          </a>
+          <a class="btn ghost icon gh-issue" href="https://github.com/heyKhoaiz/chatshelf/issues/new/choose" target="_blank" rel="noopener noreferrer" aria-label="Report a bug or suggest a feature" title="Report a bug or suggest a feature"><svg class="ic"><use href="#i-chat"/></svg></a>
+        </div>
+        <button type="button" class="link small" data-shortcuts><svg class="ic sm"><use href="#i-key"/></svg>Keyboard shortcuts <kbd>?</kbd></button>
+      </div>
+    </aside>
+
+    <main class="main" id="main" tabindex="-1">
+      <!-- Overview -->
+      <section id="view-overview" class="view overview" aria-label="Overview">
+        <div class="center">
+          <div class="panel">
+            <div class="hello">
+              <h1 id="hello" class="split">Hello</h1>
+              <p id="today" class="muted rv-text"></p>
+            </div>
+            <div class="stats" id="stats" aria-busy="true"></div>
+            <label class="ask rv-text">
+              <svg class="ic"><use href="#i-search"/></svg>
+              <span class="sr-only">Search across all sessions</span>
+              <input id="ask" type="search" placeholder="Search across all your sessions and prompts…" autocomplete="off">
+              <kbd>/</kbd>
+            </label>
+            <div id="pinnedBlock" hidden>
+              <div class="section-head"><h2>Bookmarked chats</h2><button type="button" class="link" data-view="bookmarks">All bookmarks</button></div>
+              <div id="pinned" class="rows"></div>
+            </div>
+            <div class="section-head">
+              <h2>Recent sessions</h2>
+              <button type="button" class="link" data-view="sessions">View all</button>
+            </div>
+            <div id="recent" class="rows" aria-busy="true"></div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="panel">
+            <div class="panel-head"><svg class="ic"><use href="#i-chat"/></svg><h2>Activity</h2></div>
+            <div class="panel-body">
+              <p class="small muted">Sessions per day, last 16 weeks</p>
+              <div id="heat" class="heat" role="img"></div>
+              <p class="small heat-foot" id="heatFoot"></p>
+            </div>
+          </div>
+          <div class="panel" id="toolPanel" hidden>
+            <div class="panel-head col row-between"><div><h2>By tool</h2><p class="small muted">Chats from every AI tool on this computer</p></div><button type="button" class="link" data-sources>Manage</button></div>
+            <div id="toolBars" class="rows tight"></div>
+          </div>
+          <div class="panel" id="bmPanel" hidden>
+            <div class="panel-head col row-between"><div><h2>Bookmarks</h2><p class="small muted">Messages you saved</p></div><button type="button" class="link" data-view="bookmarks">View all</button></div>
+            <div id="bmRecent" class="rows tight"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head col"><h2>Needs attention</h2><p class="small muted">Project folders that were renamed or deleted</p></div>
+            <div id="attention" class="rows tight"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head col"><h2>Most active projects</h2><p class="small muted">By number of sessions</p></div>
+            <div id="topProjects" class="rows tight"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sessions -->
+      <section id="view-sessions" class="view" aria-label="Sessions" hidden>
+        <div class="panel">
+          <div class="page-head">
+            <h1 class="split">Sessions</h1>
+            <p class="muted small" id="count" aria-live="polite"></p>
+          </div>
+          <div class="sticky-tools">
+            <div class="bar">
+              <label class="field grow">
+                <svg class="ic"><use href="#i-search"/></svg>
+                <span class="sr-only">Search sessions</span>
+                <input id="q" type="search" placeholder="Search titles, prompts, folders, IDs…" autocomplete="off">
+                <kbd>/</kbd>
+              </label>
+              <select id="proj" aria-label="Filter by project"><option value="">All projects</option></select>
+              <select id="dateRange" aria-label="Filter by date">
+                <option value="">Any time</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 3 months</option>
+                <option value="year">This year</option>
+                <option value="custom">Custom range…</option>
+              </select>
+            </div>
+            <div id="dateCustom" class="date-custom" hidden>
+              <label>From <input type="date" id="dateFrom"></label>
+              <label>To <input type="date" id="dateTo"></label>
+              <button type="button" class="link small" data-date-clear>Clear dates</button>
+            </div>
+            <div class="src-tabs" id="srcTabs" role="group" aria-label="Filter by tool"></div>
+            <div class="toolbar">
+              <div class="tabs-pill" id="sessTabs" role="group" aria-label="Show"></div>
+              <div class="tool-right">
+                <label class="toggle"><input type="checkbox" id="showEmpty"> <span>Show empty</span></label>
+                <div class="seg" role="group" aria-label="Sort">
+                  <button type="button" data-sort="new" aria-pressed="true">Newest</button>
+                  <button type="button" data-sort="old" aria-pressed="false">Oldest</button>
+                  <button type="button" data-sort="big" aria-pressed="false">Longest</button>
+                </div>
+              </div>
+            </div>
+            <label class="select-all"><input type="checkbox" id="selectAll"> <span class="eyebrow">Select all shown</span></label>
+          </div>
+          <div id="list" class="rows" aria-busy="true"></div>
+          <button type="button" id="more" class="btn ghost full" hidden>Show more</button>
+        </div>
+      </section>
+
+      <!-- Bookmarks -->
+      <section id="view-bookmarks" class="view" aria-label="Bookmarks" hidden>
+        <div class="panel">
+          <div class="page-head">
+            <h1 class="split">Bookmarks</h1>
+            <p class="muted small rv-text" id="bmCount">Messages you saved from your chats, with your notes.</p>
+          </div>
+          <div class="bar">
+            <label class="field grow">
+              <svg class="ic"><use href="#i-search"/></svg>
+              <span class="sr-only">Search bookmarks</span>
+              <input id="bmQ" type="search" placeholder="Search bookmarked chats, messages and notes…" autocomplete="off">
+            </label>
+          </div>
+          <div class="toolbar"><div class="tabs-pill" id="bmTabs" role="group" aria-label="Show"></div></div>
+          <div id="bmList" class="bm-list"></div>
+        </div>
+      </section>
+
+      <!-- Projects -->
+      <section id="view-projects" class="view" aria-label="Projects" hidden>
+        <div class="page-head outer">
+          <h1 class="split">Projects</h1>
+          <p class="muted small rv-text">Each folder you have used Claude Code in, and whether it still exists.</p>
+        </div>
+        <div class="panel summary" id="projSummary"></div>
+        <div class="panel table-panel">
+          <div class="toolbar"><div class="tabs-pill" id="projTabs" role="group" aria-label="Show"></div></div>
+          <div id="projects" class="tbl"></div>
+        </div>
+      </section>
+
+      <!-- Backups -->
+      <section id="view-backups" class="view" aria-label="Backups" hidden>
+        <div class="panel">
+          <div class="page-head">
+            <h1 class="split">Backups</h1>
+            <p class="muted small rv-text">Every move saves a copy here first: <code id="backupRoot"></code>. <b>Restore</b> copies the sessions back to their old folder. It skips files that are already there and leaves the moved copies in place.</p>
+          </div>
+          <div id="backups" class="rows"></div>
+        </div>
+      </section>
+
+      <div id="bulk" class="bulk" hidden>
+        <div class="bulk-info"><b id="bulkCount"></b> <span id="bulkMeta" class="muted small"></span></div>
+        <div class="bulk-actions">
+          <button type="button" id="bulkClear" class="btn ghost">Clear <kbd>Esc</kbd></button>
+          <button type="button" id="bulkGo" class="btn accent"><svg class="ic"><use href="#i-move"/></svg><span id="bulkGoLabel">Move sessions</span></button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Conversation drawer -->
+  <dialog id="detail" class="drawer" aria-labelledby="detailTitle">
+    <div class="drawer-head">
+      <div class="dlg-head">
+        <div class="min0">
+          <p class="crumb" id="detailProject"></p>
+          <h2 id="detailTitle"></h2>
+          <div id="detailMeta" class="detail-meta"></div>
+        </div>
+        <div class="head-actions">
+          <button type="button" class="btn ghost icon" id="detailPin" aria-pressed="false" aria-label="Bookmark this chat" title="Bookmark this chat"><svg class="ic"><use href="#i-bookmark"/></svg></button>
+          <button type="button" class="btn ghost icon" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+      </div>
+      <div class="resume">
+        <div class="resume-label eyebrow" id="resumeLabel">Resume in terminal</div>
+        <code id="detailCmd"></code>
+        <div class="resume-actions">
+          <button type="button" class="btn accent sm" id="detailOpen"><svg class="ic"><use href="#i-terminal"/></svg><span id="detailOpenLabel">Open in terminal</span></button>
+          <button type="button" class="btn ghost sm" id="detailCopy"><svg class="ic"><use href="#i-copy"/></svg><span>Copy</span></button>
+          <p class="resume-note small muted" id="resumeNote" hidden></p>
+          <button type="button" class="btn ghost sm" id="detailMove"><svg class="ic"><use href="#i-move"/></svg>Move…</button>
+        </div>
+      </div>
+      <div id="detailMarks" class="marks" hidden></div>
+      <div class="convo-tools">
+        <label class="field grow sm">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="sr-only">Find in conversation</span>
+          <input id="find" type="search" placeholder="Find in this conversation…" autocomplete="off">
+          <span id="findCount" class="muted small" aria-live="polite"></span>
+        </label>
+        <div class="seg" role="group" aria-label="Show">
+          <button type="button" data-who="all" aria-pressed="true">All</button>
+          <button type="button" data-who="user" aria-pressed="false">My prompts</button>
+          <button type="button" data-who="bm" aria-pressed="false">Bookmarked</button>
+        </div>
+        <button type="button" id="jumpEnd" class="btn ghost sm"><svg class="ic"><use href="#i-down"/></svg>Latest</button>
+      </div>
+    </div>
+    <div id="transcript" class="transcript"></div>
+  </dialog>
+
+  <!-- Move dialog -->
+  <dialog id="mover" class="modal" aria-labelledby="moverTitle">
+    <form id="moverForm" method="dialog">
+      <div class="dlg-head">
+        <h2 id="moverTitle">Move sessions</h2>
+        <button type="button" class="btn ghost icon" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <p class="small">From <code id="moverFrom"></code> <span id="moverFromState"></span></p>
+      <div id="suggestBox">
+        <h3>Suggested folders</h3>
+        <div id="suggestions" class="choices"></div>
+      </div>
+      <h3><label for="moverTo">New folder</label></h3>
+      <input id="moverTo" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="/home/you/projects/new-name" aria-describedby="moverPreview">
+      <div class="browser">
+        <div class="browser-head"><span class="muted small">Browse:</span> <code id="browsePath"></code></div>
+        <div id="browseList" class="browse-list"></div>
+      </div>
+      <p id="moverPreview" class="small"></p>
+      <p id="moverError" class="error" role="alert"></p>
+      <div class="actions">
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" id="moverGo" class="btn accent">Move sessions</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Command palette -->
+  <dialog id="palette" class="palette" aria-label="Search or jump to">
+    <div class="pal-input">
+      <svg class="ic"><use href="#i-search"/></svg>
+      <input id="palQ" type="text" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list" placeholder="Search sessions, projects and actions…" autocomplete="off" spellcheck="false">
+      <kbd>Esc</kbd>
+    </div>
+    <div id="palList" class="pal-list" role="listbox" aria-label="Results"></div>
+    <div class="pal-foot muted small"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></div>
+  </dialog>
+
+  <!-- Tools & import -->
+  <dialog id="sources" class="modal" aria-labelledby="srcTitle">
+    <div class="dlg-head">
+      <div><h2 id="srcTitle">Tools &amp; import</h2><p class="small muted">The app reads chat history from these tools. It never changes their files.</p></div>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div id="srcList" class="src-list"></div>
+    <h3>Import a ChatGPT or claude.ai export</h3>
+    <p class="small muted">Web chats aren't stored on your computer. Download your data (ChatGPT: Settings → Data controls → Export data. claude.ai: Settings → Privacy → Export data), then drop the .zip here. Importing again updates the same chats instead of adding duplicates.</p>
+    <label class="drop" id="drop">
+      <input type="file" id="importFile" accept=".zip,.json,application/zip,application/json">
+      <svg class="ic"><use href="#i-upload"/></svg>
+      <span id="dropText"><b>Choose the export .zip</b> or drop it here</span>
+    </label>
+    <p id="importMsg" class="small" role="status" aria-live="polite"></p>
+  </dialog>
+
+  <!-- Shortcuts -->
+  <dialog id="shortcuts" class="modal narrow" aria-labelledby="scTitle">
+    <div class="dlg-head">
+      <h2 id="scTitle">Keyboard shortcuts</h2>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <dl class="sc-list">
+      <div><dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Search or jump to anything</dd></div>
+      <div><dt><kbd>/</kbd></dt><dd>Focus search</dd></div>
+      <div><dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Next / previous session in a list</dd></div>
+      <div><dt><kbd>Enter</kbd></dt><dd>Open the highlighted session</dd></div>
+      <div><dt><kbd>x</kbd></dt><dd>Select the highlighted session</dd></div>
+      <div><dt><kbd>b</kbd></dt><dd>Bookmark the highlighted chat (or remove it)</dd></div>
+      <div><dt><kbd>g</kbd> then <kbd>o</kbd> <kbd>s</kbd> <kbd>m</kbd> <kbd>p</kbd> <kbd>b</kbd></dt><dd>Go to Overview, Sessions, Bookmarks, Projects, Backups</dd></div>
+      <div><dt><kbd>Esc</kbd></dt><dd>Close a panel or clear the selection</dd></div>
+      <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>
+    </dl>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

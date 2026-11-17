@@ -1,0 +1,31 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks! Please leave out personal paths and chat content. Made-up examples are fine.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool's chats?
+      multiple: true
+      options: [Claude Code, Codex, Cursor, Copilot Chat, OpenCode, Gemini CLI, ChatGPT import, claude.ai import, Not tool-specific]
+  - type: input
+    id: env
+    attributes:
+      label: OS and Node version
+      placeholder: Ubuntu 24.04, Node 22.12
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output or screenshot (optional)

@@ -1,0 +1,23 @@
+name: Support another tool
+description: Ask for (or offer to write) a reader for another AI tool's chat history
+labels: [new tool, help wanted]
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: Windsurf, Zed, Aider, Continue…
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where does it store chats?
+      description: Folder or file path per OS, and the format (JSON, JSONL, SQLite…), if you know it. Don't paste real chat content.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can test a reader with my own data
+        - label: I'd like to write the reader myself (see CONTRIBUTING.md)

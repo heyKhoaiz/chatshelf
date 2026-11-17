@@ -1,0 +1,44 @@
+{
+  "name": "chatshelf",
+  "version": "0.1.0",
+  "description": "One place for your AI coding chats: browse, search and bookmark Claude Code, Codex, Cursor and Copilot history, and fix Claude Code sessions after renaming a folder. Local, no dependencies.",
+  "license": "MIT",
+  "author": "Shaikh khoaiz Ahmmed",
+  "homepage": "https://github.com/heyKhoaiz/chatshelf#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heyKhoaiz/chatshelf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/heyKhoaiz/chatshelf/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "cursor",
+    "copilot",
+    "chat-history",
+    "ai",
+    "developer-tools",
+    "local-first"
+  ],
+  "type": "module",
+  "bin": {
+    "chatshelf": "bin/chatshelf.mjs"
+  },
+  "files": [
+    "server.mjs",
+    "sources.mjs",
+    "public",
+    "bin"
+  ],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.mjs",
+    "demo": "node scripts/demo.mjs",
+    "test": "node test/smoke.mjs",
+    "check": "node --check server.mjs && node --check sources.mjs && node --check public/app.js"
+  }
+}
