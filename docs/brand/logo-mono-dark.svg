@@ -1,10 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Chatshelf">
   <rect width="32" height="32" rx="8" fill="#1C1917"/>
-  <g fill="#FFFFFF">
-    <rect x="7" y="12" width="4.25" height="12" rx="1.5"/>
-    <rect x="12.25" y="10.5" width="4.25" height="13.5" rx="1.5" transform="rotate(12 12.25 24)"/>
-    <path d="M20.5 8h3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-2.25L19 21.75V18.6A3 3 0 0 1 17.5 16v-5a3 3 0 0 1 3-3Z" fill="none" stroke="#1C1917" stroke-width="1.6" stroke-linejoin="round"/>
-    <path d="M20.5 8h3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-2.25L19 21.75V18.6A3 3 0 0 1 17.5 16v-5a3 3 0 0 1 3-3Z"/>
-    <rect x="5.5" y="24" width="21" height="2" rx="1"/>
-  </g>
+  <path d="M10.5 17.75H22.5A2.5 2.5 0 0 1 25 20.25V20.75A2.5 2.5 0 0 1 22.5 23.25H13L9.5 25.75V23.05A2.5 2.5 0 0 1 8 20.75V20.25A2.5 2.5 0 0 1 10.5 17.75Z" fill="#FFFFFF"/>
+  <path d="M9.5 12H21.5A2.5 2.5 0 0 1 24 14.5V15A2.5 2.5 0 0 1 21.5 17.5H12L8.5 20V17.3A2.5 2.5 0 0 1 7 15V14.5A2.5 2.5 0 0 1 9.5 12Z" fill="none" stroke="#1C1917" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M9.5 12H21.5A2.5 2.5 0 0 1 24 14.5V15A2.5 2.5 0 0 1 21.5 17.5H12L8.5 20V17.3A2.5 2.5 0 0 1 7 15V14.5A2.5 2.5 0 0 1 9.5 12Z" fill="#FFFFFF"/>
+  <path d="M11 6.25H23A2.5 2.5 0 0 1 25.5 8.75V9.25A2.5 2.5 0 0 1 23 11.75H13.5L10 14.25V11.55A2.5 2.5 0 0 1 8.5 9.25V8.75A2.5 2.5 0 0 1 11 6.25Z" fill="none" stroke="#1C1917" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M11 6.25H23A2.5 2.5 0 0 1 25.5 8.75V9.25A2.5 2.5 0 0 1 23 11.75H13.5L10 14.25V11.55A2.5 2.5 0 0 1 8.5 9.25V8.75A2.5 2.5 0 0 1 11 6.25Z" fill="#FFFFFF"/>
 </svg>
