@@ -5,6 +5,8 @@
 **One place for your AI coding chats.**
 Browse, search and bookmark your history from Claude Code, Codex, Cursor and GitHub Copilot, and get Claude Code sessions back after you rename a project folder.
 
+[![npm](https://img.shields.io/npm/v/chatshelf?color=E8590C)](https://www.npmjs.com/package/chatshelf)
+[![npm downloads](https://img.shields.io/npm/dm/chatshelf?color=1C1917)](https://www.npmjs.com/package/chatshelf)
 [![GitHub stars](https://img.shields.io/github/stars/heyKhoaiz/chatshelf?style=flat&color=E8590C)](https://github.com/heyKhoaiz/chatshelf/stargazers)
 [![CI](https://github.com/heyKhoaiz/chatshelf/actions/workflows/ci.yml/badge.svg)](https://github.com/heyKhoaiz/chatshelf/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-1C1917)](LICENSE)
@@ -55,6 +57,15 @@ Or install it once and run `chatshelf` any time:
 npm install -g chatshelf
 chatshelf
 ```
+
+Update to the latest version:
+
+```bash
+npx chatshelf@latest          # npx: always run the newest version
+npm update -g chatshelf       # if you installed it with -g
+```
+
+Releases and notes: [GitHub releases](https://github.com/heyKhoaiz/chatshelf/releases) · [npm](https://www.npmjs.com/package/chatshelf).
 
 From source (no dependencies, no build step):
 

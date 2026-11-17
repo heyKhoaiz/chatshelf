@@ -1,5 +1,7 @@
 # Releasing Chatshelf
 
+Chatshelf is published on npm as [`chatshelf`](https://www.npmjs.com/package/chatshelf). Users get new versions with `npx chatshelf@latest` or `npm update -g chatshelf`, so a release reaches them right away.
+
 This guide is for maintainers. One command does the whole release: it runs the tests, bumps the version, publishes to npm, pushes to GitHub, and creates a GitHub release with notes.
 
 ## One-time setup
@@ -15,7 +17,9 @@ This guide is for maintainers. One command does the whole release: it runs the t
    gh auth login
    ```
    Without it, the release still publishes to npm and pushes to GitHub. You then create the GitHub release on github.com.
-4. You need publish rights on the `chatshelf` npm package and push rights on `heyKhoaiz/chatshelf`.
+4. You need publish rights on the `chatshelf` npm package and push rights on `heyKhoaiz/chatshelf`. Check with `npm access list collaborators chatshelf`.
+
+Coding agents working in this repo must not publish or release unless the maintainer asks; see [AGENTS.md](AGENTS.md).
 
 ## Pick the version
 
