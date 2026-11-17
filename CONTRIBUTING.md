@@ -61,6 +61,10 @@ Rules for readers:
 - UI: warm neutrals, ink `#1C1917` for primary actions, orange `#E8590C` as the one accent, 44px touch targets, visible focus rings, and respect for `prefers-reduced-motion`.
 - Commit messages: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`…).
 
+## Releasing (maintainers)
+
+Releases are made with one command, `npm run release -- patch` (or `minor` / `major`). See **[RELEASING.md](RELEASING.md)**.
+
 ## Reporting bugs
 
 Open an issue with your OS, Node version, the tool involved and what you expected. Leave out personal paths and chat content.

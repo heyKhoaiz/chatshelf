@@ -40,6 +40,7 @@
     "demo": "node scripts/demo.mjs",
     "test": "node test/smoke.mjs",
     "check": "node --check server.mjs && node --check sources.mjs && node --check public/app.js",
-    "prepublishOnly": "npm run check && npm test"
+    "prepublishOnly": "npm run check && npm test",
+    "release": "node scripts/release.mjs"
   }
 }
