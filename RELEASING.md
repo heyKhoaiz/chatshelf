@@ -80,6 +80,7 @@ To edit the notes after a release, open the release on GitHub and click **Edit**
 | --- | --- |
 | `403 … Two-factor authentication … is required` | Turn on 2FA for **Authorization and writes** (see setup), then run the release again. |
 | `ENEEDAUTH` / not signed in | `npm login` |
+| `EOTP` / `Not running in an interactive terminal` | Run the release in your own terminal window, so npm can ask for your 2FA confirmation. Scripts, CI and AI agents can't answer that prompt. |
 | `You're on "some-branch"` | `git switch main && git pull` |
 | `You have uncommitted changes` | Commit or stash them: `git status` |
 | Published to npm, but `git push` failed | `git push --follow-tags origin main`, then `gh release create vX.Y.Z --generate-notes` |

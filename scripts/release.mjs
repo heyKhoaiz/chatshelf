@@ -82,6 +82,11 @@ if (dry) {
   process.exit(0);
 }
 
+// npm needs the maintainer's 2FA confirmation (browser or one-time code), which only works in a real terminal.
+if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  fail('Not running in an interactive terminal, so npm could not ask for your 2FA confirmation.', 'Run the same command yourself in a terminal window. Nothing was changed.');
+}
+
 // 3. Version bump: makes a commit and a tag, locally only
 step(`Bumping version (${bump})`);
 const version = run('npm', ['version', bump, '-m', 'chore: release v%s'], { capture: true }).replace(/^v/, '');
