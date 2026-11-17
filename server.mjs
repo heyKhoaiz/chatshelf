@@ -682,7 +682,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const server = http.createServer(async (req, res) => {
   try {
     const host = req.headers.host;
-    if (host !== `${HOST}:${PORT}` && host !== `localhost:${PORT}`) return send(res, 403, { error: 'Bad host.' });
+    if (!ALLOWED_HOSTS.has(host)) return send(res, 403, { error: 'Bad host.' });
     const url = new URL(req.url, `http://${host}`);
     if (url.pathname.startsWith('/api/')) {
       if (req.headers['x-token'] !== TOKEN) return send(res, 403, { error: 'Session expired. Reload the page.' });
@@ -699,7 +699,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-const appUrl = `http://${HOST}:${PORT}/`;
+// Browsers send any *.localhost name to this computer, so chatshelf.localhost needs no setup and,
+// like 127.0.0.1, can never point anywhere else (which keeps the DNS-rebinding protection).
+// Safari on macOS may not resolve *.localhost, so macOS opens 127.0.0.1; both always work.
+const NICE_HOST = 'chatshelf.localhost';
+const ALLOWED_HOSTS = new Set([`${HOST}:${PORT}`, `localhost:${PORT}`, `${NICE_HOST}:${PORT}`]);
+const niceUrl = `http://${NICE_HOST}:${PORT}/`;
+const ipUrl = `http://${HOST}:${PORT}/`;
+const appUrl = process.platform === 'darwin' ? ipUrl : niceUrl;
 const open = () => {
   if (process.argv.includes('--no-open')) return;
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
@@ -708,7 +715,7 @@ const open = () => {
 
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
-    console.log(`Already running at ${appUrl}`);
+    console.log(`Chatshelf is already running at ${appUrl}`);
     open();
     process.exit(0);
   }
@@ -716,7 +723,8 @@ server.on('error', (e) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Chatshelf: ${appUrl}  (Ctrl+C to stop)`);
+  console.log(`Chatshelf is running at ${appUrl}`);
+  console.log(`  also at ${appUrl === niceUrl ? ipUrl : niceUrl}  (Ctrl+C to stop)`);
   console.log(`Reading sessions from ${ROOT}`);
   const t = Date.now();
   scan().then((p) => console.log(`Indexed ${p.reduce((n, x) => n + x.sessions.length, 0)} sessions in ${Date.now() - t} ms`));

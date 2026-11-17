@@ -15,7 +15,7 @@ It is **published on npm** as [`chatshelf`](https://www.npmjs.com/package/chatsh
 ## Commands
 
 ```bash
-npm start                 # run against your real chats (http://127.0.0.1:4317)
+npm start                 # run against your real chats (http://chatshelf.localhost:4317)
 npm run demo              # run against fake chats in a temp folder
 npm test                  # end-to-end smoke test against demo data
 npm run check             # syntax check
@@ -41,7 +41,7 @@ Only `server.mjs`, `sources.mjs`, `public/` and `bin/` ship in the npm package (
 
 - **Privacy:** the app reads people's private chats. Never put real chat content, real personal paths or real screenshots into code, tests, docs or commits. Screenshots come from `npm run demo`.
 - **Read-only:** never write to another tool's files. The only writes outside Chatshelf's own folders are user-triggered moves and restores of Claude Code sessions, always with a backup first.
-- **Security:** keep the server on `127.0.0.1`, keep the `Host` check and the per-run token on every `/api/` route, and escape everything rendered into HTML.
+- **Security:** keep the server on `127.0.0.1`, keep the `Host` allow-list (`127.0.0.1`, `localhost`, `chatshelf.localhost` only) and the per-run token on every `/api/` route, and escape everything rendered into HTML.
 - **Readers:** a missing or unreadable file means "not found", never a crash. Mark a reader `experimental` until it has been tested on real data. When adding one, follow CONTRIBUTING.md (reader, `TOOLS` and `ASSISTANT` in `app.js`, a colour class, demo data, a smoke test).
 - **UI:** warm neutrals, ink `#1C1917` for primary actions, orange `#E8590C` as the one accent, 44px targets, visible focus, `prefers-reduced-motion` respected, SVG icons (no emoji).
 - Run `npm run check && npm test` before saying a change works.

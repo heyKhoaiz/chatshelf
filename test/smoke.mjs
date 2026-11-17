@@ -45,6 +45,12 @@ try {
     });
     assert.equal(status, 403);
   });
+  await test('accepts the chatshelf.localhost address', async () => {
+    const status = await new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port: PORT, path: '/api/projects', headers: { 'X-Token': token, Host: `chatshelf.localhost:${PORT}` } }, (r) => { r.resume(); resolve(r.statusCode); }).on('error', reject);
+    });
+    assert.equal(status, 200);
+  });
   await test('lists chats from Claude Code, Codex and Copilot', async () => {
     data = (await api('/api/projects')).data;
     const by = {};

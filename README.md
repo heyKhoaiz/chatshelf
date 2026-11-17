@@ -48,7 +48,7 @@ Chatshelf reads all of it locally and puts it on one shelf.
 You need **Node.js 22.5 or newer**.
 
 ```bash
-npx chatshelf        # opens http://127.0.0.1:4317
+npx chatshelf        # opens http://chatshelf.localhost:4317
 ```
 
 Or install it once and run `chatshelf` any time:
@@ -57,6 +57,14 @@ Or install it once and run `chatshelf` any time:
 npm install -g chatshelf
 chatshelf
 ```
+
+### Open it
+
+- Run `chatshelf` (or `npx chatshelf`). It opens **http://chatshelf.localhost:4317** in your browser.
+- Already running? Running `chatshelf` again just opens the browser to it.
+- Bookmark the address to get back in one click while it's running.
+- Press **Ctrl+C** in the terminal to stop it. Run `chatshelf --help` to see every option.
+- Just installed and your shell says `command not found`? Open a new terminal tab, or run `rehash` (zsh) or `hash -r` (bash).
 
 Update to the latest version:
 
@@ -75,11 +83,15 @@ cd chatshelf
 npm start
 ```
 
+The address works in Chrome, Edge, Firefox and Brave with no setup. If your browser can't open it (Safari on macOS, for example), use http://127.0.0.1:4317. Both always work.
+
 To look around without your own history, run `npm run demo`. It uses fake chats in a temporary folder.
 
 Options:
 
 ```bash
+chatshelf --help                # all options
+chatshelf --version             # installed version
 chatshelf --no-open             # don't open the browser
 PORT=5000 chatshelf             # use another port
 CHATSHELF_TERMINAL=kitty chatshelf   # pick the terminal for "Open in terminal"
@@ -123,7 +135,7 @@ A move:
 
 ## Privacy and safety
 
-- It listens on `127.0.0.1` only and rejects requests with an unexpected `Host` header, which blocks DNS rebinding.
+- It listens on `127.0.0.1` only and accepts only the `127.0.0.1`, `localhost` and `chatshelf.localhost` host names, which blocks DNS rebinding.
 - Every API call needs a random token that changes each time the server starts.
 - It reads other tools' files but never changes them. The only writes outside its own folders are moving or restoring Claude Code sessions, and only when you click **Move** or **Restore**.
 - One network request: the **Star on GitHub** button fetches the public star count from `api.github.com`, cached for 6 hours. Nothing about you or your chats is sent.
