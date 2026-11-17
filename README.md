@@ -11,7 +11,7 @@ Browse, search and bookmark your history from Claude Code, Codex, Cursor and Git
 ![Node 22.5+](https://img.shields.io/badge/node-%E2%89%A522.5-1C1917)
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-15803D)
 
-![Chatshelf overview](docs/overview.png)
+![Chatshelf overview](https://raw.githubusercontent.com/heyKhoaiz/chatshelf/main/docs/overview.png)
 
 </div>
 
@@ -37,18 +37,31 @@ Chatshelf reads all of it locally and puts it on one shelf.
 
 | Sessions | Conversation |
 | --- | --- |
-| ![Sessions list](docs/sessions.png) | ![Conversation view](docs/conversation.png) |
+| ![Sessions list](https://raw.githubusercontent.com/heyKhoaiz/chatshelf/main/docs/sessions.png) | ![Conversation view](https://raw.githubusercontent.com/heyKhoaiz/chatshelf/main/docs/conversation.png) |
 | **Projects: fix renamed folders** | **Dark theme** |
-| ![Projects](docs/projects.png) | ![Dark theme](docs/dark.png) |
+| ![Projects](https://raw.githubusercontent.com/heyKhoaiz/chatshelf/main/docs/projects.png) | ![Dark theme](https://raw.githubusercontent.com/heyKhoaiz/chatshelf/main/docs/dark.png) |
 
 ## Quick start
 
-You need **Node.js 22.5 or newer**. There's nothing to install.
+You need **Node.js 22.5 or newer**.
+
+```bash
+npx chatshelf        # opens http://127.0.0.1:4317
+```
+
+Or install it once and run `chatshelf` any time:
+
+```bash
+npm install -g chatshelf
+chatshelf
+```
+
+From source (no dependencies, no build step):
 
 ```bash
 git clone https://github.com/heyKhoaiz/chatshelf.git
 cd chatshelf
-npm start            # opens http://127.0.0.1:4317
+npm start
 ```
 
 To look around without your own history, run `npm run demo`. It uses fake chats in a temporary folder.
@@ -56,9 +69,9 @@ To look around without your own history, run `npm run demo`. It uses fake chats 
 Options:
 
 ```bash
-npm start -- --no-open          # don't open the browser
-PORT=5000 npm start             # use another port
-CHATSHELF_TERMINAL=kitty npm start   # pick the terminal for "Open in terminal"
+chatshelf --no-open             # don't open the browser
+PORT=5000 chatshelf             # use another port
+CHATSHELF_TERMINAL=kitty chatshelf   # pick the terminal for "Open in terminal"
 ```
 
 ## Supported tools
