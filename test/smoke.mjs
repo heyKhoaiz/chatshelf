@@ -13,8 +13,8 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chatshelf-test-'));
 const { projects } = makeDemoHome(home);
 const PORT = String(4400 + Math.floor(Math.random() * 400));
-const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: '', XDG_DATA_HOME: '', XDG_CACHE_HOME: '', CLAUDE_CONFIG_DIR: '', CODEX_HOME: '', PORT };
-for (const k of ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME']) delete env[k];
+const env = { ...process.env, HOME: home, PORT, CHATSHELF_HOST: 'myshelf.localhost', CHATSHELF_NO_SPAWN: '1' };
+for (const k of ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'CHATSHELF_PORT']) delete env[k];
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(ROOT, 'server.mjs'), '--no-open'], { env, stdio: ['ignore', 'pipe', 'inherit'] });
 
 const base = `http://127.0.0.1:${PORT}`;
@@ -50,6 +50,58 @@ try {
       http.get({ host: '127.0.0.1', port: PORT, path: '/api/projects', headers: { 'X-Token': token, Host: `chatshelf.localhost:${PORT}` } }, (r) => { r.resume(); resolve(r.statusCode); }).on('error', reject);
     });
     assert.equal(status, 200);
+  });
+  await test('accepts a custom .localhost address', async () => {
+    const status = await new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port: PORT, path: '/api/projects', headers: { 'X-Token': token, Host: `myshelf.localhost:${PORT}` } }, (r) => { r.resume(); resolve(r.statusCode); }).on('error', reject);
+    });
+    assert.equal(status, 200);
+  });
+  // Runs a second copy and returns { code, out }.
+  const runCopy = (extraEnv, args = []) => new Promise((resolve) => {
+    const e = { ...env, ...extraEnv };
+    for (const k of Object.keys(e)) if (e[k] === undefined) delete e[k];
+    const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(ROOT, 'server.mjs'), '--no-open', ...args], { env: e });
+    let out = '';
+    p.stdout.on('data', (c) => { out += c; if (out.includes('Chatshelf is running at')) p.kill(); });
+    p.stderr.on('data', (c) => { out += c; });
+    p.on('exit', (code) => resolve({ code, out }));
+    setTimeout(() => p.kill(), 15000);
+  });
+  await test('refuses an address that is not .localhost', async () => {
+    const r = await runCopy({ CHATSHELF_HOST: 'evil.example' });
+    assert.equal(r.code, 1);
+    assert.match(r.out, /ends in \.localhost/);
+  });
+  await test('a second start finds the running copy instead of starting again', async () => {
+    const r = await runCopy({});
+    assert.equal(r.code, 0);
+    assert.match(r.out, /already running/);
+  });
+  await test('a fixed port that is busy gives a clear message', async () => {
+    const blocker = http.createServer((q, r) => r.end('not chatshelf'));
+    const busy = Number(PORT) + 500;
+    await new Promise((res) => blocker.listen(busy, '127.0.0.1', res));
+    try {
+      const r = await runCopy({ PORT: String(busy) });
+      assert.equal(r.code, 1);
+      assert.match(r.out, /used by another program/);
+    } finally { blocker.close(); }
+  });
+  await test('without a port setting, a busy port moves to the next free one', async () => {
+    const blocker = http.createServer((q, r) => r.end('not chatshelf'));
+    const busy = Number(PORT) + 600;
+    await new Promise((res) => blocker.listen(busy, '127.0.0.1', res));
+    const runFile = path.join(home, '.cache', 'chatshelf', 'running.json');
+    const saved = fs.existsSync(runFile) ? fs.readFileSync(runFile) : null;
+    if (saved) fs.unlinkSync(runFile); // hide the running copy so a fresh start is tried
+    try {
+      const r = await runCopy({ PORT: undefined, CHATSHELF_FIRST_PORT: String(busy) });
+      assert.match(r.out, new RegExp(`Port ${busy} was busy, so Chatshelf picked ${busy + 1}`));
+    } finally {
+      blocker.close();
+      if (saved) fs.writeFileSync(runFile, saved);
+    }
   });
   await test('lists chats from Claude Code, Codex and Copilot', async () => {
     data = (await api('/api/projects')).data;
@@ -105,6 +157,19 @@ try {
     assert.equal(list.length, 1);
     assert.equal(list[0].note, 'keep', 'a partial update must not wipe the note');
     assert.equal((await api('/api/bookmarks/delete', { id: a.data.bookmark.id })).status, 200);
+  });
+  await test('hands a chat off to Codex through a private temp file', async () => {
+    const p = data.projects.find((x) => x.source === 'claude' && x.cwd === projects['api-server']);
+    const r = await api('/api/handoff', { key: p.key, id: p.sessions[0].id, target: 'codex', text: '# Handoff: test\nContinue please.' });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.match(r.data.command, /^codex "\$\(cat '.+chatshelf-handoff-[0-9a-f]+\.md'\)"$/);
+    assert.equal(fs.readFileSync(r.data.file, 'utf8'), '# Handoff: test\nContinue please.');
+    if (process.platform !== 'win32') assert.equal(fs.statSync(r.data.file).mode & 0o777, 0o600);
+    assert.equal(r.data.cwd, projects['api-server']);
+    fs.rmSync(r.data.file);
+    assert.equal((await api('/api/handoff', { key: p.key, id: p.sessions[0].id, target: 'notepad', text: 'x' })).status, 400);
+    assert.equal((await api('/api/handoff', { key: p.key, id: p.sessions[0].id, target: 'codex', text: '   ' })).status, 400);
+    assert.equal((await api('/api/handoff/targets')).status, 200);
   });
   await test('imports a claude.ai export and removes it', async () => {
     const body = JSON.stringify([{ uuid: 'c0ffee00-0000-4000-8000-000000000001', name: 'Hello', created_at: new Date().toISOString(), chat_messages: [{ uuid: 'm1', sender: 'human', text: 'Hi there, how are you today?' }, { uuid: 'm2', sender: 'assistant', text: 'Hello!' }] }]);

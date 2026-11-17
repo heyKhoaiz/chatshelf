@@ -60,14 +60,15 @@ const ICON = {
   reply: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v5"/></svg>',
 };
 let toastTimer;
-function toast(msg) {
+function toast(msg, action) {
   const t = $('toast');
-  t.textContent = msg;
+  t.innerHTML = esc(msg) + (action ? ` <a class="toast-act" href="${esc(action.href)}" target="_blank" rel="noopener noreferrer"${action.star ? ' data-star-click' : ''}>${esc(action.label)}</a>` : '');
+  t.classList.toggle('has-action', Boolean(action));
   t.classList.remove('show');
   void t.offsetWidth;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 4500);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 8000 : 4500);
 }
 async function copy(text, btn) {
   await navigator.clipboard.writeText(text);
@@ -89,7 +90,10 @@ const REPO_URL = `https://github.com/${REPO}`;
 // Shows the star count next to "Star on GitHub". Uses GitHub's public API (no account, nothing about you is sent),
 // cached for 6 hours, and stays hidden when offline.
 async function loadStars() {
-  const show = (n) => { if (typeof n === 'number') { $('ghCount').textContent = n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n); $('ghCount').hidden = false; } };
+  const show = (n) => {
+    if (typeof n !== 'number' || n < 10) return;
+    document.querySelectorAll('[data-star-count]').forEach((el) => { el.textContent = n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n); el.hidden = false; });
+  };
   try {
     const c = JSON.parse(localStorage.getItem('chatshelf-stars') || 'null');
     if (c && Date.now() - c.at < 6 * 36e5) { show(c.n); return; }
@@ -100,6 +104,27 @@ async function loadStars() {
     show(n);
   } catch { /* offline: leave the plain button */ }
 }
+
+// Ask for a star at the right time: a quiet button at first, a small card from the 3rd visit,
+// "Not now" waits 30 days, and after one click we never ask again.
+const STAR_KEY = 'chatshelf-star';
+const starState = () => { try { return JSON.parse(localStorage.getItem(STAR_KEY) || '{}'); } catch { return {}; } };
+const saveStar = (st) => localStorage.setItem(STAR_KEY, JSON.stringify(st));
+function renderStar() {
+  const st = starState();
+  const ask = !st.clicked && (st.visits || 0) >= 3 && (!st.laterUntil || Date.now() > st.laterUntil);
+  $('starCard').hidden = !ask;
+  $('ghStar').hidden = ask;
+  $('ghStar').classList.toggle('starred', Boolean(st.clicked));
+}
+function initStar() {
+  const st = starState();
+  st.visits = (st.visits || 0) + 1;
+  saveStar(st);
+  renderStar();
+}
+function starClicked() { const st = starState(); st.clicked = true; saveStar(st); setTimeout(renderStar, 300); }
+function starLater() { const st = starState(); st.laterUntil = Date.now() + 30 * DAY; saveStar(st); renderStar(); }
 
 // ---------- tools ----------
 const TOOLS = {
@@ -1124,6 +1149,123 @@ function openBookmark(id) {
   openDetail(s.uid, b.msgUuid);
 }
 
+// ---------- handoff: continue a chat in another tool ----------
+const HO_OPTIONS = [
+  { id: 'codex', label: 'Codex', sub: 'Opens a terminal and starts codex', kind: 'terminal' },
+  { id: 'claude', label: 'Claude Code', sub: 'Starts a new Claude Code session', kind: 'terminal' },
+  { id: 'copy', label: 'Copy', sub: 'Paste into Cursor, ChatGPT, anything', kind: 'copy' },
+  { id: 'download', label: 'Download', sub: 'Save as a Markdown file', kind: 'download' },
+];
+const ho = { target: 'copy', targets: null };
+const cut = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+function buildHandoff(s, msgs) {
+  const p = s.project;
+  const users = msgs.filter((m) => m.role === 'user' && m.text.trim()).map((m) => stripMd(m.text).replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const lastAnswer = [...msgs].reverse().find((m) => m.role === 'assistant' && m.text.trim());
+  const touched = [];
+  const seen = new Set();
+  for (const m of msgs) {
+    for (const t of m.tools || []) {
+      const d = String(t.detail || '').trim();
+      const k = `${t.name || t}${d ? ` ${d}` : ''}`;
+      if (!d || seen.has(k)) continue;
+      seen.add(k);
+      touched.push(k);
+    }
+  }
+  const out = [`# Handoff: ${s.title}`, ''];
+  out.push(`I'm continuing a conversation I had in ${toolLabel(s.source)} (last active ${date(s.mtime)}).`);
+  if (p.cwd) out.push(`Project folder: ${p.cwd}${s.branch ? ` (git branch ${s.branch})` : ''}`);
+  out.push('');
+  if (users.length) {
+    out.push('## What I asked, in order');
+    const pick = users.length > 12 ? [...users.slice(0, 4), '…', ...users.slice(-7)] : users;
+    for (const u of pick) out.push(u === '…' ? '- …' : `- ${cut(u, 240)}`);
+    out.push('');
+  }
+  if (lastAnswer) out.push('## Where we left off', cut(lastAnswer.text.trim(), 1800), '');
+  if (touched.length) {
+    out.push('## Files and commands involved');
+    for (const t of touched.slice(-15)) out.push(`- ${cut(t, 140)}`);
+    out.push('');
+  }
+  out.push('## What I need from you', 'Check the current state of the files above, then continue from where we left off. Ask me if anything is unclear.');
+  return out.join('\n');
+}
+
+function renderHandoffTargets() {
+  const p = state.detail.project;
+  $('hoTargets').innerHTML = HO_OPTIONS.map((o) => {
+    const t = ho.targets && ho.targets[o.id];
+    const missing = o.kind === 'terminal' && t && !t.installed;
+    return `<button type="button" class="ho-opt" role="radio" data-ho="${o.id}" aria-checked="${ho.target === o.id}" ${missing ? 'disabled' : ''}>
+      ${use(o.kind === 'copy' ? 'copy' : o.kind === 'download' ? 'download' : 'terminal')}
+      <span><b>${esc(o.label)}</b><span class="small muted">${missing ? `Not installed (no "${o.id}" command)` : esc(o.sub)}</span></span>
+    </button>`;
+  }).join('');
+  const opt = HO_OPTIONS.find((o) => o.id === ho.target);
+  $('hoGoLabel').textContent = opt.kind === 'copy' ? 'Copy handoff' : opt.kind === 'download' ? 'Download .md' : `Open in ${opt.label}`;
+  $('hoGo').querySelector('use').setAttribute('href', opt.kind === 'copy' ? '#i-copy' : opt.kind === 'download' ? '#i-download' : '#i-handoff');
+  $('hoNote').textContent = opt.kind === 'terminal'
+    ? (p.exists ? `Starts in ${short(p.cwd)} with the handoff as your first message.` : 'This chat has no project folder on this computer, so it starts in your home folder.')
+    : opt.kind === 'copy' ? 'Paste it as the first message in the other tool.' : 'Saves the handoff so you can attach or paste it later.';
+}
+
+async function openHandoff() {
+  const s = state.detail;
+  if (!s) return;
+  if (!state.msgs.length) { toast('Wait for the chat to finish loading, then try again.'); return; }
+  $('hoText').value = buildHandoff(s, state.msgs);
+  $('hoError').textContent = '';
+  updateHandoffCount();
+  if (!ho.targets) { try { ho.targets = (await api('/api/handoff/targets')).targets; } catch { ho.targets = {}; } }
+  // Default to "the other tool" when it's installed, otherwise Copy.
+  const other = s.source === 'codex' ? 'claude' : 'codex';
+  ho.target = ho.targets[other] && ho.targets[other].installed ? other : (ho.targets.claude && ho.targets.claude.installed && s.source !== 'claude' ? 'claude' : 'copy');
+  renderHandoffTargets();
+  $('handoff').showModal();
+  $('hoText').scrollTop = 0;
+}
+function updateHandoffCount() {
+  const n = $('hoText').value.length;
+  $('hoCount').textContent = `${n.toLocaleString()} characters${n > 20000 ? ' (too long, 20,000 max)' : ''}`;
+}
+
+async function goHandoff() {
+  const s = state.detail;
+  const text = $('hoText').value.trim();
+  const opt = HO_OPTIONS.find((o) => o.id === ho.target);
+  $('hoError').textContent = '';
+  if (!text) { $('hoError').textContent = 'The handoff is empty.'; return; }
+  if (opt.kind === 'copy') {
+    await navigator.clipboard.writeText(text);
+    $('handoff').close();
+    toast('Handoff copied. Paste it as the first message in the other tool.');
+    return;
+  }
+  if (opt.kind === 'download') {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+    a.download = `handoff-${s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'chat'}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('handoff').close();
+    toast('Handoff downloaded.');
+    return;
+  }
+  $('hoGo').disabled = true;
+  try {
+    const r = await api('/api/handoff', { key: s.project.key, id: s.id, target: opt.id, text });
+    $('handoff').close();
+    toast(`Opened ${r.target} in ${r.terminal}, starting from your handoff.`);
+  } catch (e) {
+    $('hoError').textContent = e.message;
+  } finally {
+    $('hoGo').disabled = false;
+  }
+}
+
 // ---------- mover ----------
 // groups: [{ key, ids|null }]  (ids null = whole project, including memory)
 async function openMover(groups) {
@@ -1228,7 +1370,11 @@ async function doMove(e) {
     }
     $('mover').close();
     state.selected.clear();
-    toast(`Moved ${plural(moved, 'session')} to ${short(to)}.${skipped ? ` Skipped ${skipped} that already existed.` : ''}`);
+    const st = starState();
+    const offer = !st.clicked && !st.offeredAfterFix;
+    if (offer) { st.offeredAfterFix = true; saveStar(st); }
+    toast(`Moved ${plural(moved, 'session')} to ${short(to)}.${skipped ? ` Skipped ${skipped} that already existed.` : ''}${offer ? ' Glad it helped?' : ''}`,
+      offer ? { label: '★ Star on GitHub', href: REPO_URL, star: true } : undefined);
   } catch (err) {
     $('moverError').textContent = moved ? `Moved ${moved}, then stopped: ${err.message}` : err.message;
   } finally {
@@ -1260,6 +1406,8 @@ function paletteItems(q) {
     { group: 'Go to', label: 'Backups', hint: 'g b', run: () => setView('backups'), icon: 'archive' },
     { group: 'Actions', label: 'Tools & import', run: () => openSources(), icon: 'plug' },
     { group: 'Chatshelf', label: 'Star Chatshelf on GitHub', run: () => window.open(REPO_URL, '_blank', 'noopener,noreferrer'), icon: 'star' },
+    { group: 'Chatshelf', label: 'About Chatshelf', run: () => $('shortcuts').showModal(), icon: 'star' },
+    { group: 'Chatshelf', label: 'Follow @khoaizahmmed on X', run: () => window.open('https://x.com/khoaizahmmed', '_blank', 'noopener,noreferrer'), icon: 'link' },
     { group: 'Chatshelf', label: 'Report a bug or suggest a feature', run: () => window.open(`${REPO_URL}/issues/new/choose`, '_blank', 'noopener,noreferrer'), icon: 'chat' },
     { group: 'Chatshelf', label: 'Contribute: add support for another tool', run: () => window.open(`${REPO_URL}/blob/main/CONTRIBUTING.md`, '_blank', 'noopener,noreferrer'), icon: 'plug' },
     { group: 'Actions', label: 'Import a ChatGPT or claude.ai export', run: () => openSources(), icon: 'upload' },
@@ -1329,7 +1477,7 @@ function applyTheme(pref, animate = true) {
   if (animate && motionOn() && document.startViewTransition && root.dataset.theme !== (dark ? 'dark' : 'light')) document.startViewTransition(set);
   else set();
 }
-darkQuery.addEventListener('change', () => { if ((localStorage.getItem('csm-theme') || 'system') === 'system') applyTheme('system'); });
+darkQuery.addEventListener('change', () => { if (localStorage.getItem('csm-theme') === 'system') applyTheme('system'); });
 
 // ---------- navigation ----------
 const VIEWS = ['overview', 'sessions', 'bookmarks', 'projects', 'backups'];
@@ -1369,6 +1517,8 @@ const focusedUid = () => { const el = document.activeElement; return el && el.da
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
+  if (e.target.closest('[data-star-click]')) starClicked();
+  if (e.target.closest('[data-star-later]')) { starLater(); return; }
   const pi = e.target.closest('[data-pal]');
   if (pi) { runPalette(Number(pi.dataset.pal)); return; }
   const t = e.target.closest('button');
@@ -1380,6 +1530,7 @@ document.addEventListener('click', async (e) => {
   else if ('sources' in d) openSources();
   else if (d.src !== undefined) { state.src = d.src; state.shown = PAGE; renderTools(); renderSessions(); stagger($('list'), ':scope > .row, :scope > .date-head', 12); if (state.view !== 'sessions') setView('sessions'); }
   else if (d.rmimport) removeImport(d.rmimport);
+  else if (d.ho) { ho.target = d.ho; renderHandoffTargets(); }
   else if ('reload' in d) { skeletons(); load(); }
   else if ('clearFilters' in d) { $('q').value = ''; $('proj').value = ''; state.sessTab = 'all'; state.src = ''; renderTools(); setDateFilter(''); }
   else if ('dateClear' in d) setDateFilter('');
@@ -1469,6 +1620,9 @@ $('bulkGo').addEventListener('click', () => openMover(bulkGroups()));
 
 $('detailCopy').addEventListener('click', (e) => copy($('detailCmd').textContent, e.currentTarget));
 $('detailOpen').addEventListener('click', openTerminal);
+$('detailHandoff').addEventListener('click', openHandoff);
+$('hoGo').addEventListener('click', goHandoff);
+$('hoText').addEventListener('input', updateHandoffCount);
 $('detailPin').addEventListener('click', () => state.detail && togglePin(state.detail.uid));
 $('detailMove').addEventListener('click', () => state.detail && openMover([{ key: state.detail.project.key, ids: [state.detail.id] }]));
 $('detail').addEventListener('close', () => { state.detail = null; history.replaceState(null, '', `#${state.view}`); });
@@ -1529,8 +1683,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ---------- start ----------
-applyTheme(localStorage.getItem('csm-theme') || 'system', false);
+applyTheme(localStorage.getItem('csm-theme') || 'light', false);
 skeletons();
 loadStars();
+initStar();
 setView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : deepLink ? 'sessions' : 'overview');
 load();

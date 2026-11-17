@@ -3,7 +3,14 @@
   "version": "0.2.0",
   "description": "One place for your AI coding chats: browse, search and bookmark Claude Code, Codex, Cursor and Copilot history, and fix Claude Code sessions after renaming a folder. Local, no dependencies.",
   "license": "MIT",
-  "author": "Shaikh khoaiz Ahmmed",
+  "author": {
+    "name": "Shaikh khoaiz Ahmmed",
+    "url": "https://khoaiz.com"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://khoaiz.com"
+  },
   "homepage": "https://github.com/heyKhoaiz/chatshelf#readme",
   "repository": {
     "type": "git",

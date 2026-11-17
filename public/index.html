@@ -4,11 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chatshelf</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#1C1917">
   <link rel="stylesheet" href="/style.css">
   <script>
     window.CSM_TOKEN = "__TOKEN__";
     (function () {
-      var pref = localStorage.getItem('csm-theme') || 'system';
+      var pref = localStorage.getItem('csm-theme') || 'light';
       var dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
       var root = document.documentElement;
       root.dataset.theme = dark ? 'dark' : 'light';
@@ -44,19 +46,22 @@
     <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0Zm5 9v4"/></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/></symbol>
+    <symbol id="i-handoff" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M4 19h16"/></symbol>
     <symbol id="i-key" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></symbol>
   </svg>
 
   <div class="shell">
     <aside class="side" aria-label="Main">
       <div class="logo">
-        <span class="mark" aria-hidden="true">&gt;_</span>
+        <img class="mark-img logo-on-light" src="/logo.svg" alt="" width="34" height="34">
+        <img class="mark-img logo-on-dark" src="/logo-reversed.svg" alt="" width="34" height="34">
         <span class="logo-name">Chatshelf</span>
       </div>
 
       <button type="button" class="side-search" data-palette>
         <svg class="ic"><use href="#i-search"/></svg>
-        <span>Search or jump to…</span>
+        <span>Search…</span>
         <kbd>Ctrl K</kbd>
       </button>
 
@@ -74,19 +79,37 @@
       </div>
 
       <div class="side-foot">
-        <div class="theme" role="group" aria-label="Theme">
-          <button type="button" data-theme-set="light" aria-pressed="false"><svg class="ic"><use href="#i-sun"/></svg><span>Light</span></button>
-          <button type="button" data-theme-set="dark" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg><span>Dark</span></button>
-          <button type="button" data-theme-set="system" aria-pressed="false"><svg class="ic"><use href="#i-monitor"/></svg><span>Auto</span></button>
-        </div>
-        <button type="button" class="btn ghost full side-tools" data-sources><svg class="ic"><use href="#i-plug"/></svg><span>Tools &amp; import</span><span id="toolCount" class="nav-count"></span></button>
-        <div class="gh-row">
-          <a class="btn ghost gh-star" id="ghStar" href="https://github.com/heyKhoaiz/chatshelf" target="_blank" rel="noopener noreferrer" aria-label="Star Chatshelf on GitHub">
-            <svg class="ic"><use href="#i-star"/></svg><span>Star on GitHub</span><span class="gh-count" id="ghCount" hidden></span>
+        <div id="starCard" class="star-card" hidden>
+          <button type="button" class="star-x" data-star-later aria-label="Not now" title="Not now (ask again in 30 days)"><svg class="ic"><use href="#i-x"/></svg></button>
+          <div class="star-head">
+            <span class="star-badge" aria-hidden="true"><svg class="ic"><use href="#i-star"/></svg></span>
+            <p class="star-title">Is Chatshelf saving you time?</p>
+          </div>
+          <p class="star-text">A star on GitHub helps other developers find it.</p>
+          <a class="btn full star-go" href="https://github.com/heyKhoaiz/chatshelf" target="_blank" rel="noopener noreferrer" data-star-click>
+            <svg class="ic"><use href="#i-star"/></svg><span>Star on GitHub</span><span class="gh-count" data-star-count hidden></span>
           </a>
-          <a class="btn ghost icon gh-issue" href="https://github.com/heyKhoaiz/chatshelf/issues/new/choose" target="_blank" rel="noopener noreferrer" aria-label="Report a bug or suggest a feature" title="Report a bug or suggest a feature"><svg class="ic"><use href="#i-chat"/></svg></a>
         </div>
-        <button type="button" class="link small" data-shortcuts><svg class="ic sm"><use href="#i-key"/></svg>Keyboard shortcuts <kbd>?</kbd></button>
+        <a class="btn ghost full gh-star" id="ghStar" href="https://github.com/heyKhoaiz/chatshelf" target="_blank" rel="noopener noreferrer" data-star-click>
+          <svg class="ic"><use href="#i-star"/></svg><span class="gh-label">Star on GitHub</span><span class="gh-count" data-star-count hidden></span>
+        </a>
+        <button type="button" class="btn ghost full side-tools" data-sources><svg class="ic"><use href="#i-plug"/></svg><span>Tools &amp; import</span><span id="toolCount" class="nav-count"></span></button>
+        <div class="foot-row">
+          <div class="theme icons" role="group" aria-label="Theme">
+            <button type="button" data-theme-set="light" aria-pressed="false" aria-label="Light theme" title="Light"><svg class="ic"><use href="#i-sun"/></svg></button>
+            <button type="button" data-theme-set="dark" aria-pressed="false" aria-label="Dark theme" title="Dark"><svg class="ic"><use href="#i-moon"/></svg></button>
+            <button type="button" data-theme-set="system" aria-pressed="false" aria-label="Match system theme" title="Auto (match system)"><svg class="ic"><use href="#i-monitor"/></svg></button>
+          </div>
+          <div class="foot-icons">
+            <button type="button" class="foot-btn" data-shortcuts aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)"><svg class="ic"><use href="#i-key"/></svg></button>
+            <a class="foot-btn" href="https://github.com/heyKhoaiz/chatshelf/issues/new/choose" target="_blank" rel="noopener noreferrer" aria-label="Send feedback or report a bug" title="Feedback"><svg class="ic"><use href="#i-chat"/></svg></a>
+          </div>
+        </div>
+        <p class="made-by">
+          Made by <a href="https://khoaiz.com" target="_blank" rel="noopener noreferrer" title="khoaiz.com">khoaiz</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://x.com/khoaizahmmed" target="_blank" rel="noopener noreferrer" aria-label="Follow @khoaizahmmed on X" title="@khoaizahmmed on X" class="x-follow"><svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.32l4.37 5.78L17.75 3Zm-1.08 16.17h1.7L7.4 4.74H5.58l11.09 14.43Z"/></svg>Follow</a>
+        </p>
       </div>
     </aside>
 
@@ -268,6 +291,7 @@
         <code id="detailCmd"></code>
         <div class="resume-actions">
           <button type="button" class="btn accent sm" id="detailOpen"><svg class="ic"><use href="#i-terminal"/></svg><span id="detailOpenLabel">Open in terminal</span></button>
+          <button type="button" class="btn ghost sm" id="detailHandoff" title="Carry this chat over to Codex, Claude Code or any other tool"><svg class="ic"><use href="#i-handoff"/></svg>Continue in…</button>
           <button type="button" class="btn ghost sm" id="detailCopy"><svg class="ic"><use href="#i-copy"/></svg><span>Copy</span></button>
           <p class="resume-note small muted" id="resumeNote" hidden></p>
           <button type="button" class="btn ghost sm" id="detailMove"><svg class="ic"><use href="#i-move"/></svg>Move…</button>
@@ -319,6 +343,26 @@
     </form>
   </dialog>
 
+  <!-- Handoff -->
+  <dialog id="handoff" class="modal" aria-labelledby="hoTitle">
+    <div class="dlg-head">
+      <div>
+        <h2 id="hoTitle">Continue in another tool</h2>
+        <p class="small muted">Tools can't open each other's chats, so Chatshelf writes a short handoff for the next tool to pick up from. Edit it if you like.</p>
+      </div>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="ho-targets" role="radiogroup" aria-label="Where to continue" id="hoTargets"></div>
+    <label class="ho-label" for="hoText"><span>Handoff</span><span class="muted small" id="hoCount"></span></label>
+    <textarea id="hoText" class="ho-text" spellcheck="false"></textarea>
+    <p class="small muted" id="hoNote"></p>
+    <p id="hoError" class="error" role="alert"></p>
+    <div class="actions">
+      <button type="button" class="btn ghost" data-close>Cancel</button>
+      <button type="button" class="btn accent" id="hoGo"><svg class="ic"><use href="#i-handoff"/></svg><span id="hoGoLabel">Continue</span></button>
+    </div>
+  </dialog>
+
   <!-- Command palette -->
   <dialog id="palette" class="palette" aria-label="Search or jump to">
     <div class="pal-input">
@@ -350,7 +394,7 @@
   <!-- Shortcuts -->
   <dialog id="shortcuts" class="modal narrow" aria-labelledby="scTitle">
     <div class="dlg-head">
-      <h2 id="scTitle">Keyboard shortcuts</h2>
+      <h2 id="scTitle">Shortcuts &amp; about</h2>
       <button type="button" class="btn ghost icon" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
     <dl class="sc-list">
@@ -364,6 +408,19 @@
       <div><dt><kbd>Esc</kbd></dt><dd>Close a panel or clear the selection</dd></div>
       <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>
     </dl>
+    <div class="credits">
+      <img class="logo-on-light" src="/logo.svg" alt="" width="36" height="36">
+      <img class="logo-on-dark" src="/logo-reversed.svg" alt="" width="36" height="36">
+      <div class="min0">
+        <p class="credits-name">Chatshelf <span class="muted">v__VERSION__</span></p>
+        <p class="small muted">Made by Shaikh khoaiz Ahmmed</p>
+      </div>
+      <nav class="credits-links" aria-label="Author links">
+        <a href="https://khoaiz.com" target="_blank" rel="noopener noreferrer">khoaiz.com</a>
+        <a href="https://x.com/khoaizahmmed" target="_blank" rel="noopener noreferrer">X @khoaizahmmed</a>
+        <a href="https://github.com/heyKhoaiz/chatshelf" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </nav>
+    </div>
   </dialog>
 
   <div id="toast" role="status" aria-live="polite"></div>

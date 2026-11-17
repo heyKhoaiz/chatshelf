@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="https://raw.githubusercontent.com/heyKhoaiz/chatshelf/main/docs/brand/logo.svg" width="88" height="88" alt="Chatshelf logo">
+
 # Chatshelf
 
 **One place for your AI coding chats.**
@@ -12,6 +14,7 @@ Browse, search and bookmark your history from Claude Code, Codex, Cursor and Git
 [![License: MIT](https://img.shields.io/badge/license-MIT-1C1917)](LICENSE)
 ![Node 22.5+](https://img.shields.io/badge/node-%E2%89%A522.5-1C1917)
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-15803D)
+[![Follow @khoaizahmmed on X](https://img.shields.io/badge/follow-%40khoaizahmmed-1C1917?logo=x)](https://x.com/khoaizahmmed)
 
 ![Chatshelf overview](https://raw.githubusercontent.com/heyKhoaiz/chatshelf/main/docs/overview.png)
 
@@ -61,7 +64,7 @@ chatshelf
 ### Open it
 
 - Run `chatshelf` (or `npx chatshelf`). It opens **http://chatshelf.localhost:4317** in your browser.
-- Already running? Running `chatshelf` again just opens the browser to it.
+- Already running? Running `chatshelf` again just opens the browser to it, even if it picked another port.
 - Bookmark the address to get back in one click while it's running.
 - Press **Ctrl+C** in the terminal to stop it. Run `chatshelf --help` to see every option.
 - Just installed and your shell says `command not found`? Open a new terminal tab, or run `rehash` (zsh) or `hash -r` (bash).
@@ -87,14 +90,25 @@ The address works in Chrome, Edge, Firefox and Brave with no setup. If your brow
 
 To look around without your own history, run `npm run demo`. It uses fake chats in a temporary folder.
 
-Options:
+### Choose the address
+
+By default Chatshelf uses **http://chatshelf.localhost:4317**. If port 4317 is taken by another program, it moves to the next free port (4318, 4319…) by itself and prints the address.
 
 ```bash
-chatshelf --help                # all options
-chatshelf --version             # installed version
-chatshelf --no-open             # don't open the browser
-PORT=5000 chatshelf             # use another port
-CHATSHELF_TERMINAL=kitty chatshelf   # pick the terminal for "Open in terminal"
+chatshelf --port 5000              # your own port (used as-is; you get a message if it's taken)
+chatshelf --host work.localhost    # your own name: http://work.localhost:4317
+chatshelf --host notes.localhost --port 8080
+```
+
+Names must end in `.localhost`. Browsers always send those to your own computer, which keeps Chatshelf safe from other websites. The same settings work as environment variables: `CHATSHELF_PORT=5000`, `CHATSHELF_HOST=work.localhost` (`PORT` also works).
+
+Other options:
+
+```bash
+chatshelf --help                   # all options
+chatshelf --version                # installed version
+chatshelf --no-open                # don't open the browser
+CHATSHELF_TERMINAL=kitty chatshelf # terminal for "Open in terminal"
 ```
 
 ## Supported tools
@@ -135,7 +149,7 @@ A move:
 
 ## Privacy and safety
 
-- It listens on `127.0.0.1` only and accepts only the `127.0.0.1`, `localhost` and `chatshelf.localhost` host names, which blocks DNS rebinding.
+- It listens on `127.0.0.1` only and accepts only `127.0.0.1`, `localhost`, `chatshelf.localhost` and the `.localhost` name you choose, which blocks DNS rebinding.
 - Every API call needs a random token that changes each time the server starts.
 - It reads other tools' files but never changes them. The only writes outside its own folders are moving or restoring Claude Code sessions, and only when you click **Move** or **Restore**.
 - One network request: the **Star on GitHub** button fetches the public star count from `api.github.com`, cached for 6 hours. Nothing about you or your chats is sent.
@@ -145,6 +159,12 @@ A move:
 Contributions are very welcome, especially readers for more tools (Windsurf, Zed, Aider, Continue…) and testing the experimental ones. See **[CONTRIBUTING.md](CONTRIBUTING.md)**. It takes about five minutes to get going: no build step, no dependencies.
 
 If Chatshelf helped you find a lost chat, **[give it a ⭐ on GitHub](https://github.com/heyKhoaiz/chatshelf)**. It helps other people find it.
+
+## Author
+
+Made by **Shaikh khoaiz Ahmmed**: [khoaiz.com](https://khoaiz.com) · [X @khoaizahmmed](https://x.com/khoaizahmmed) · [GitHub @heyKhoaiz](https://github.com/heyKhoaiz)
+
+Ideas, bugs or just saying hi: open an [issue](https://github.com/heyKhoaiz/chatshelf/issues) or find me on [X](https://x.com/khoaizahmmed).
 
 ## License
 

@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
 const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const port = process.env.PORT || '4317';
+const port = process.env.CHATSHELF_PORT || process.env.PORT || '4317';
+const host = process.env.CHATSHELF_HOST || 'chatshelf.localhost';
 
 if (args.includes('--version') || args.includes('-v')) {
   console.log(version);
@@ -18,15 +19,18 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(`Chatshelf ${version}: one place for your AI coding chats
 
 Usage
-  chatshelf              start and open http://chatshelf.localhost:${port}
-                         (if it's already running, this just opens the browser)
-  chatshelf --no-open    start without opening the browser
-  chatshelf --version    print the version
-  chatshelf --help       show this help
+  chatshelf                    start and open http://${host}:${port}
+                               (if it's already running, this just opens it)
+  chatshelf --port 5000        use this port (default: 4317, or the next free one)
+  chatshelf --host work.localhost   use your own address (must end in .localhost)
+  chatshelf --no-open          start without opening the browser
+  chatshelf --version          print the version
+  chatshelf --help             show this help
 
-Settings (environment variables)
-  PORT=5000                  use another port
-  CHATSHELF_TERMINAL=kitty   terminal for "Open in terminal"
+Settings (environment variables, same as the flags)
+  CHATSHELF_PORT=5000          port
+  CHATSHELF_HOST=work.localhost   address
+  CHATSHELF_TERMINAL=kitty     terminal for "Open in terminal"
 
 Stop it with Ctrl+C. If the address doesn't open in your browser, use http://127.0.0.1:${port}.
 Docs: https://github.com/heyKhoaiz/chatshelf`);

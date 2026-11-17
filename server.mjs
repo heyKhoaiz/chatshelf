@@ -24,8 +24,33 @@ const OLD_DATA_DIR = path.join(DATA_ROOT, 'claude-session-manager');
 if (!fs.existsSync(DATA_DIR) && fs.existsSync(OLD_DATA_DIR)) { try { fs.renameSync(OLD_DATA_DIR, DATA_DIR); } catch { /* keep going with a fresh folder */ } }
 const BOOKMARKS = path.join(DATA_DIR, 'bookmarks.json');
 const CACHE_FILE = path.join(process.env.XDG_CACHE_HOME || path.join(HOME, '.cache'), 'chatshelf', 'index.json');
-const PORT = Number(process.env.PORT || 4317);
 const HOST = '127.0.0.1';
+const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'package.json'), 'utf8')).version; } catch { return ''; } })();
+
+// ---------- address: --port / --host flags, CHATSHELF_PORT / CHATSHELF_HOST (or PORT) settings ----------
+function flag(name) {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i >= 0) return process.argv[i + 1];
+  const eq = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return eq ? eq.slice(name.length + 3) : undefined;
+}
+const portSetting = flag('port') ?? process.env.CHATSHELF_PORT ?? process.env.PORT;
+// A port the user chose is used as-is; otherwise start at 4317 and move up if it's taken.
+const PORT_FIXED = portSetting !== undefined && portSetting !== '' && portSetting !== 'auto';
+// CHATSHELF_FIRST_PORT only exists so the tests can check the automatic choice without touching 4317.
+const DEFAULT_PORT = Number(process.env.CHATSHELF_FIRST_PORT || 4317);
+let PORT = PORT_FIXED ? Number(portSetting) : DEFAULT_PORT;
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  console.error(`"${portSetting}" isn't a valid port. Use a number from 1 to 65535, e.g. --port 5000.`);
+  process.exit(1);
+}
+// The name must be localhost or end in .localhost: browsers always send those to this computer,
+// which keeps the DNS-rebinding protection.
+const NICE_HOST = String(flag('host') ?? process.env.CHATSHELF_HOST ?? 'chatshelf.localhost').toLowerCase().replace(/^https?:\/\//, '').replace(/[:/].*$/, '');
+if (!/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*localhost$/.test(NICE_HOST)) {
+  console.error(`"${NICE_HOST}" can't be used. Pick a name that ends in .localhost, e.g. --host work.localhost`);
+  process.exit(1);
+}
 const TOKEN = crypto.randomBytes(24).toString('hex');
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 
@@ -466,6 +491,37 @@ async function openTerminal({ key, id }) {
   return { terminal: path.basename(cmd[0]) };
 }
 
+// ---------- handoff: continue a chat in another tool ----------
+// The handoff text goes into a private temp file and the tool starts with it as its first message.
+// Nothing is written into any tool's own history.
+const HANDOFF_TARGETS = { codex: { bin: 'codex', label: 'Codex' }, claude: { bin: 'claude', label: 'Claude Code' } };
+const noSpawn = () => Boolean(process.env.CHATSHELF_NO_SPAWN); // tests: build the command, don't run it
+
+function handoffTargets() {
+  const out = {};
+  for (const [id, t] of Object.entries(HANDOFF_TARGETS)) out[id] = { label: t.label, installed: Boolean(which(t.bin)) };
+  return out;
+}
+
+async function startHandoff({ key, id, target, text }) {
+  const p = await getProject(key);
+  if (!p.sessions.some((x) => x.id === id)) throw new HttpError(404, 'Unknown session.');
+  const t = HANDOFF_TARGETS[target];
+  if (!t) throw new HttpError(400, 'Pick Codex or Claude Code.');
+  if (typeof text !== 'string' || !text.trim()) throw new HttpError(400, 'The handoff is empty.');
+  if (text.length > 20000) throw new HttpError(400, 'The handoff is too long (20,000 characters max). Shorten it first.');
+  if (!which(t.bin) && !noSpawn()) throw new HttpError(501, `${t.label} isn't installed (no "${t.bin}" command). Use Copy instead.`);
+  const cwd = p.exists ? p.cwd : HOME;
+  const file = path.join(os.tmpdir(), `chatshelf-handoff-${crypto.randomBytes(6).toString('hex')}.md`);
+  fs.writeFileSync(file, text, { mode: 0o600 });
+  const command = `${t.bin} "$(cat ${shq(file)})"`;
+  if (noSpawn()) return { dryRun: true, command, file, cwd };
+  const cmd = terminalCommand(cwd, command);
+  if (!cmd) throw new HttpError(501, 'No supported terminal found. Use Copy instead, or set CHATSHELF_TERMINAL.');
+  spawn(cmd[0], cmd[1], { cwd, stdio: 'ignore', detached: true }).unref();
+  return { terminal: path.basename(cmd[0]), target: t.label, cwd };
+}
+
 // ---------- bookmarks (one JSON file, written atomically) ----------
 function readBookmarks() {
   try { const v = JSON.parse(fs.readFileSync(BOOKMARKS, 'utf8')); return Array.isArray(v) ? v : []; } catch { return []; }
@@ -657,6 +713,10 @@ async function api(req, res, url) {
       return send(res, 200, saveBookmark(await readJson(req)));
     case 'POST /api/bookmarks/delete':
       return send(res, 200, deleteBookmark((await readJson(req)).id));
+    case 'GET /api/handoff/targets':
+      return send(res, 200, { targets: handoffTargets() });
+    case 'POST /api/handoff':
+      return send(res, 200, await startHandoff(await readJson(req)));
     case 'GET /api/sources':
       return send(res, 200, { sources: await sourceStatus() });
     case 'POST /api/import': {
@@ -676,8 +736,8 @@ async function api(req, res, url) {
   }
 }
 
-const STATIC = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css' };
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const STATIC = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/logo.svg': 'logo.svg', '/logo-reversed.svg': 'logo-reversed.svg', '/favicon.svg': 'favicon.svg', '/favicon.ico': 'favicon.svg' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -691,7 +751,7 @@ const server = http.createServer(async (req, res) => {
     const file = STATIC[url.pathname];
     if (!file || req.method !== 'GET') return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
     let body = await fsp.readFile(path.join(PUBLIC, file), 'utf8');
-    if (file === 'index.html') body = body.replace('__TOKEN__', TOKEN);
+    if (file === 'index.html') body = body.replace('__TOKEN__', TOKEN).replaceAll('__VERSION__', VERSION);
     return send(res, 200, body, TYPES[path.extname(file)]);
   } catch (e) {
     if (!(e instanceof HttpError)) console.error(e);
@@ -702,31 +762,100 @@ const server = http.createServer(async (req, res) => {
 // Browsers send any *.localhost name to this computer, so chatshelf.localhost needs no setup and,
 // like 127.0.0.1, can never point anywhere else (which keeps the DNS-rebinding protection).
 // Safari on macOS may not resolve *.localhost, so macOS opens 127.0.0.1; both always work.
-const NICE_HOST = 'chatshelf.localhost';
-const ALLOWED_HOSTS = new Set([`${HOST}:${PORT}`, `localhost:${PORT}`, `${NICE_HOST}:${PORT}`]);
-const niceUrl = `http://${NICE_HOST}:${PORT}/`;
-const ipUrl = `http://${HOST}:${PORT}/`;
-const appUrl = process.platform === 'darwin' ? ipUrl : niceUrl;
-const open = () => {
+let ALLOWED_HOSTS = new Set();
+let niceUrl = '';
+let ipUrl = '';
+let appUrl = '';
+function setAddress(port) {
+  PORT = port;
+  ALLOWED_HOSTS = new Set([`${HOST}:${port}`, `localhost:${port}`, `chatshelf.localhost:${port}`, `${NICE_HOST}:${port}`]);
+  niceUrl = `http://${NICE_HOST}:${port}/`;
+  ipUrl = `http://${HOST}:${port}/`;
+  appUrl = process.platform === 'darwin' ? ipUrl : niceUrl;
+}
+setAddress(PORT);
+
+// Where the running copy writes its address, so `chatshelf` can find it again on any port.
+const RUN_FILE = path.join(path.dirname(CACHE_FILE), 'running.json');
+function readRunning() {
+  try { return JSON.parse(fs.readFileSync(RUN_FILE, 'utf8')); } catch { return null; }
+}
+// Is the server on this port a Chatshelf? (Asks with an allowed Host header.)
+function isChatshelf(port) {
+  return new Promise((resolve) => {
+    const req = http.get({ host: HOST, port, path: '/', timeout: 1500, headers: { Host: `${HOST}:${port}` } }, (res) => {
+      let body = '';
+      res.on('data', (c) => { body += c; if (body.length > 4000) res.destroy(); });
+      res.on('end', () => resolve(body.includes('<title>Chatshelf')));
+      res.on('close', () => resolve(body.includes('<title>Chatshelf')));
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+const open = (url = appUrl) => {
   if (process.argv.includes('--no-open')) return;
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
-  spawn(cmd, [appUrl], { stdio: 'ignore', detached: true }).unref();
+  spawn(cmd, [url], { stdio: 'ignore', detached: true }).unref();
 };
 
-server.on('error', (e) => {
-  if (e.code === 'EADDRINUSE') {
-    console.log(`Chatshelf is already running at ${appUrl}`);
-    open();
+function listen(port) {
+  return new Promise((resolve, reject) => {
+    const onError = (e) => { server.off('listening', onListening); reject(e); };
+    const onListening = () => { server.off('error', onError); resolve(); };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, HOST);
+  });
+}
+
+async function start() {
+  // Already running somewhere (maybe on an automatic port)? Open that one instead.
+  const running = readRunning();
+  if (running && running.port && (!PORT_FIXED || running.port === PORT) && await isChatshelf(running.port)) {
+    console.log(`Chatshelf is already running at ${running.url}`);
+    open(running.url);
     process.exit(0);
   }
-  throw e;
-});
+  const first = PORT;
+  for (let port = first; port < first + 20; port++) {
+    try {
+      await listen(port);
+      setAddress(port);
+      return;
+    } catch (e) {
+      if (e.code !== 'EADDRINUSE') throw e;
+      if (await isChatshelf(port)) {
+        setAddress(port);
+        console.log(`Chatshelf is already running at ${appUrl}`);
+        open();
+        process.exit(0);
+      }
+      if (PORT_FIXED) {
+        console.error(`Port ${port} is used by another program. Pick another one, e.g. --port ${port + 1}, or leave --port out to choose one automatically.`);
+        process.exit(1);
+      }
+    }
+  }
+  console.error(`Ports ${first}-${first + 19} are all in use. Pick one with --port.`);
+  process.exit(1);
+}
 
-server.listen(PORT, HOST, () => {
+const cleanup = () => {
+  const r = readRunning();
+  if (r && r.pid === process.pid) { try { fs.unlinkSync(RUN_FILE); } catch { /* already gone */ } }
+};
+process.on('exit', cleanup);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
+
+start().then(() => {
+  fs.mkdirSync(path.dirname(RUN_FILE), { recursive: true });
+  fs.writeFileSync(RUN_FILE, JSON.stringify({ url: appUrl, port: PORT, pid: process.pid }));
+  if (PORT !== DEFAULT_PORT && !PORT_FIXED) console.log(`Port ${DEFAULT_PORT} was busy, so Chatshelf picked ${PORT}.`);
   console.log(`Chatshelf is running at ${appUrl}`);
   console.log(`  also at ${appUrl === niceUrl ? ipUrl : niceUrl}  (Ctrl+C to stop)`);
   console.log(`Reading sessions from ${ROOT}`);
   const t = Date.now();
   scan().then((p) => console.log(`Indexed ${p.reduce((n, x) => n + x.sessions.length, 0)} sessions in ${Date.now() - t} ms`));
   open();
-});
+}).catch((e) => { console.error(e); process.exit(1); });
