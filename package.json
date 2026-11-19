@@ -35,7 +35,9 @@
   },
   "files": [
     "server.mjs",
+    "core.mjs",
     "sources.mjs",
+    "mcp.mjs",
     "public",
     "bin"
   ],
@@ -46,8 +48,10 @@
     "start": "node --disable-warning=ExperimentalWarning server.mjs",
     "demo": "node scripts/demo.mjs",
     "test": "node test/smoke.mjs",
-    "check": "node --check server.mjs && node --check sources.mjs && node --check public/app.js",
+    "check": "node --check server.mjs && node --check core.mjs && node --check sources.mjs && node --check mcp.mjs && node --check public/app.js && node --check vscode/extension.cjs",
     "prepublishOnly": "npm run check && npm test",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "test:vscode": "node test/vscode.mjs",
+    "pack:vscode": "node scripts/pack-vscode.mjs"
   }
 }

@@ -1,0 +1,51 @@
+{
+  "name": "chatshelf",
+  "displayName": "Chatshelf",
+  "description": "One place for your AI coding chats: browse, search and bookmark Claude Code, Codex, Cursor and Copilot history, and fix Claude Code sessions after renaming a folder. Local only.",
+  "version": "0.1.0",
+  "publisher": "heykhoaiz",
+  "license": "MIT",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1C1917",
+    "theme": "dark"
+  },
+  "author": {
+    "name": "Shaikh khoaiz Ahmmed",
+    "url": "https://khoaiz.com"
+  },
+  "homepage": "https://github.com/heyKhoaiz/chatshelf#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/heyKhoaiz/chatshelf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/heyKhoaiz/chatshelf/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "cursor",
+    "copilot",
+    "chat-history"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./extension.cjs",
+  "contributes": {
+    "commands": [
+      {
+        "command": "chatshelf.open",
+        "title": "Open",
+        "category": "Chatshelf"
+      }
+    ]
+  }
+}

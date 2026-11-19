@@ -24,6 +24,8 @@ Usage
   chatshelf --port 5000        use this port (default: 4317, or the next free one)
   chatshelf --host work.localhost   use your own address (must end in .localhost)
   chatshelf --no-open          start without opening the browser
+  chatshelf mcp                run as an MCP server, so an AI tool can search your past chats
+                               (claude mcp add chatshelf -- npx -y chatshelf mcp)
   chatshelf --version          print the version
   chatshelf --help             show this help
 
@@ -44,6 +46,8 @@ if (major < 22 || (major === 22 && minor < 5)) {
   process.exit(1);
 }
 
-const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(root, 'server.mjs'), ...args], { stdio: 'inherit' });
+// `chatshelf mcp`: talk MCP over stdin/stdout instead of starting the web app.
+const entry = args[0] === 'mcp' ? ['mcp.mjs', args.slice(1)] : ['server.mjs', args];
+const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(root, entry[0]), ...entry[1]], { stdio: 'inherit' });
 child.on('exit', (code) => process.exit(code ?? 0));
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => child.kill(sig));

@@ -18,7 +18,8 @@ Requires Node.js 22.5 or newer.
 
 | File | What it does |
 | --- | --- |
-| `server.mjs` | HTTP server and API. Reads Claude Code sessions, moves them, handles backups, bookmarks and opening terminals. |
+| `server.mjs` | HTTP server: address, access checks, static files. Passes API calls to `core.mjs`. |
+| `core.mjs` | The API. Reads Claude Code sessions, moves them, handles backups, bookmarks and opening terminals. |
 | `sources.mjs` | Readers for every other tool (Codex, Cursor, Copilot, OpenCode, Gemini CLI) and the ChatGPT and claude.ai importers. |
 | `public/` | The web app: `index.html`, `app.js`, `style.css`. |
 | `test/demo-data.mjs` | Builds a fake home folder with chats from several tools. |
@@ -43,7 +44,7 @@ Then:
 
 1. Add it to `READERS` at the bottom of `sources.mjs`.
 2. Add its name to `TOOLS` and `ASSISTANT` in `public/app.js`, and a colour in `style.css` (`.s-mytool { --tool: … }`).
-3. If it can be resumed, add it to `resumeInfo()` in `app.js` and to `openTerminal()` in `server.mjs`.
+3. If it can be resumed, add it to `resumeInfo()` in `app.js` and to `openTerminal()` in `core.mjs`.
 4. Add a few fake chats to `test/demo-data.mjs` and a check to `test/smoke.mjs`.
 
 Rules for readers:

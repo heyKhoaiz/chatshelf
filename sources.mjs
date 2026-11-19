@@ -111,7 +111,22 @@ const codex = {
       try {
         out.push(await cached(file, async (st) => {
           const d = { id: '', cwd: '', branch: '', prompts: [], promptCount: 0, start: '' };
+          let model = '';
+          let total = null;
+          const files = new Set();
           for await (const line of lines(file)) {
+            // Files changed by apply_patch: "*** Update File: path" inside the call's input.
+            if (line.includes('*** ') && files.size < 200) {
+              for (const m of line.matchAll(/\*\*\* (?:Update|Add|Delete) File: ([^\\"]+)/g)) files.add(m[1].trim());
+            }
+            if (line.includes('"token_count"') || line.includes('"turn_context"')) {
+              let o;
+              try { o = JSON.parse(line); } catch { continue; }
+              const p = o.payload || {};
+              if (o.type === 'turn_context' && p.model) model = p.model;
+              else if (p.type === 'token_count' && p.info && p.info.total_token_usage) total = p.info.total_token_usage;
+              continue;
+            }
             if (!line.includes('"session_meta"') && !line.includes('"role":"user"')) continue;
             let o;
             try { o = JSON.parse(line); } catch { continue; }
@@ -127,7 +142,16 @@ const codex = {
             }
           }
           if (!d.id) d.id = (path.basename(file).match(/([0-9a-f]{8}-[0-9a-f-]{27})/) || [])[1] || path.basename(file, '.jsonl');
-          return { ...d, ...summarize(d.prompts, d.promptCount), mtime: st.mtimeMs, size: st.size, ref: file };
+          // Codex reports running totals; cached input is part of input_tokens. No prices for these models.
+          let usage = null;
+          if (total) {
+            const cr = Number(total.cached_input_tokens) || 0;
+            const u = { in: Math.max(0, (Number(total.input_tokens) || 0) - cr), out: Number(total.output_tokens) || 0, cw: 0, cw1h: 0, cr };
+            usage = { ...u, cost: null, models: { [model || 'codex']: { ...u, cost: null } } };
+          }
+          const cwd = d.cwd;
+          const abs = [...files].map((f) => (path.isAbsolute(f) || !cwd ? f : path.join(cwd, f)));
+          return { ...d, ...summarize(d.prompts, d.promptCount), usage, files: abs, mtime: st.mtimeMs, size: st.size, ref: file };
         }));
       } catch { /* unreadable file */ }
     }

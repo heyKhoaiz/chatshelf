@@ -180,6 +180,109 @@ try {
     assert.equal((await api('/api/imports/delete', { source: 'claudeai' })).status, 200);
   });
 
+  await test('reads token usage, estimated cost and changed files', async () => {
+    const all = (await api('/api/projects')).data.projects.flatMap((p) => p.sessions);
+    const c = all.find((s) => s.source === 'claude' && s.usage);
+    assert.ok(c, 'a Claude chat has usage');
+    assert.ok(c.usage.out > 0 && c.usage.cr > 0);
+    assert.ok(c.usage.cost > 0, 'Claude models are priced');
+    assert.ok(c.files.length >= 1 && c.files[0].endsWith('.ts'));
+    const x = all.find((s) => s.source === 'codex');
+    assert.equal(x.usage.in, 14000);
+    assert.equal(x.usage.cr, 38000);
+    assert.equal(x.usage.cost, null, 'no prices for Codex models');
+    assert.ok(x.files[0].endsWith(path.join('api-server', 'src', 'server.ts')));
+  });
+  await test('searches inside replies, not only prompts', async () => {
+    // "SIGTERM" only appears in the Codex reply.
+    const r = await api('/api/search?q=sigterm');
+    assert.equal(r.status, 200);
+    assert.equal(r.data.hits.length, 1);
+    assert.equal(r.data.hits[0].role, 'assistant');
+    assert.match(r.data.hits[0].snippet, /SIGTERM/);
+    assert.equal((await api('/api/search?q=sliding%20headers')).data.hits.length, 1, 'all words, anywhere in the chat');
+    assert.equal((await api('/api/search?q=zzzznothing')).data.hits.length, 0);
+  });
+  await test('tags a chat', async () => {
+    const s = data.projects.find((x) => x.source === 'claude').sessions[0];
+    const r = await api('/api/tags', { sessionId: s.id, tags: ['#Bug', 'perf', 'bug'] });
+    assert.deepEqual(r.data.tags, ['bug', 'perf']);
+    assert.deepEqual((await api('/api/tags')).data.tags[s.id], ['bug', 'perf']);
+    assert.equal((await api('/api/tags', { sessionId: s.id, tags: ['no spaces?!'] })).status, 400);
+    await api('/api/tags', { sessionId: s.id, tags: [] });
+    assert.equal((await api('/api/tags')).data.tags[s.id], undefined);
+  });
+  await test('archives chats, keeps one Claude Code deleted, and restores it', async () => {
+    const before = (await api('/api/archive')).data;
+    assert.equal(before.auto, false);
+    assert.equal(before.kept, 0);
+    const on = await api('/api/archive/settings', { auto: true });
+    assert.equal(on.data.kept, on.data.total);
+    const p = (await api('/api/projects')).data.projects.find((x) => x.source === 'claude' && x.cwd === projects['acme-web']);
+    const s = p.sessions[0];
+    const file = path.join(home, '.claude', 'projects', p.key, `${s.id}.jsonl`);
+    const original = fs.readFileSync(file, 'utf8');
+    fs.unlinkSync(file); // what Claude Code's cleanup does
+    const gone = (await api('/api/projects')).data.projects.flatMap((x) => x.sessions).find((x) => x.id === s.id);
+    assert.equal(gone.archived, 'only');
+    assert.ok((await api(`/api/session?key=${encodeURIComponent(p.key)}&id=${s.id}`)).data.messages.length >= 2, 'still readable');
+    assert.equal((await api('/api/move', { key: p.key, to: home, ids: [s.id] })).status, 400, 'archive-only chats are not moved');
+    const r = await api('/api/archive/restore', { key: p.key, id: s.id });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+    assert.equal((await api('/api/archive/restore', { key: p.key, id: s.id })).status, 400, 'nothing left to restore');
+    await api('/api/archive/settings', { auto: false });
+  });
+  await test('answers MCP requests over stdio', async () => {
+    const mcp = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(ROOT, 'mcp.mjs')], { env, stdio: ['pipe', 'pipe', 'inherit'] });
+    const replies = new Map();
+    let buf = '';
+    mcp.stdout.on('data', (c) => {
+      buf += c;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); replies.set(m.id, m); }
+    });
+    const ask = async (id, method, params) => {
+      mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+      for (let n = 0; n < 150 && !replies.has(id); n++) await new Promise((r) => setTimeout(r, 100));
+      return replies.get(id);
+    };
+    try {
+      const init = await ask(1, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } });
+      assert.equal(init.result.serverInfo.name, 'chatshelf');
+      mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+      const tools = await ask(2, 'tools/list', {});
+      assert.deepEqual(tools.result.tools.map((t) => t.name), ['search_chats', 'list_chats', 'read_chat']);
+      const found = await ask(3, 'tools/call', { name: 'search_chats', arguments: { query: 'SIGTERM' } });
+      assert.match(found.result.content[0].text, /Add graceful shutdown/);
+      const id = found.result.content[0].text.match(/id: (\S+)/)[1];
+      const chat = await ask(4, 'tools/call', { name: 'read_chat', arguments: { id } });
+      assert.match(chat.result.content[0].text, /closes on SIGTERM/);
+      const list = await ask(5, 'tools/call', { name: 'list_chats', arguments: { tool: 'claude', limit: 3 } });
+      assert.equal(list.result.content[0].text.split('\n').length, 3);
+      const bad = await ask(6, 'tools/call', { name: 'read_chat', arguments: { id: 'nope' } });
+      assert.equal(bad.result.isError, true);
+      assert.equal((await ask(7, 'no/such', {})).error.code, -32601);
+    } finally { mcp.kill(); }
+  });
+
+  await test('core.mjs works without the web server (as the VS Code extension uses it)', async () => {
+    // A separate process, because core.mjs reads HOME when it loads.
+    const code = `const { handle } = await import(${JSON.stringify(path.join(ROOT, 'core.mjs'))});
+      const r = await handle('GET /api/projects');
+      let notFound = 0; try { await handle('GET /api/nope'); } catch (e) { notFound = e.status; }
+      console.log(JSON.stringify({ n: r.projects.length, notFound }));`;
+    const out = await new Promise((resolve, reject) => {
+      const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=module', '-e', code], { env, stdio: ['ignore', 'pipe', 'inherit'] });
+      let s = '';
+      p.stdout.on('data', (c) => { s += c; });
+      p.on('error', reject);
+      p.on('close', (c) => (c === 0 ? resolve(JSON.parse(s)) : reject(new Error(`exit ${c}`))));
+    });
+    assert.equal(out.n, data.projects.length);
+    assert.equal(out.notFound, 404);
+  });
+
   console.log(`\n${passed} passed`);
 } catch (e) {
   console.error(`\nFAILED after ${passed} passed:`, e.message);

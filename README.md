@@ -31,14 +31,19 @@ Chatshelf reads all of it locally and puts it on one shelf.
 ## Features
 
 - **Every tool in one list.** Claude Code, Codex, Cursor and GitHub Copilot Chat are read straight from your disk. ChatGPT and claude.ai come in through their data exports. OpenCode and Gemini CLI are experimental.
-- **Search everything.** Titles, every prompt you typed, folders, branches and session IDs. Filter by tool, project and date (today, last 7 days, custom range…).
+- **Search everything.** Your prompts *and* the replies, the commands that ran, files that changed, folders, branches, `#tags` and session IDs. Filter by tool, project, tag and date (today, last 7 days, custom range…).
+- **Never lose a chat.** Claude Code deletes chats you haven't used in 30 days. Turn on **Keep every chat** and Chatshelf keeps its own copy, so old chats stay readable, and you can restore one to Claude Code to resume it.
+- **See what you used.** Tokens per day, per model and per project, and an estimated cost at Claude API list prices (what the same work would cost on the API; on a subscription you don't pay it). Codex shows tokens.
+- **Files changed.** Each chat lists the files it edited. Click one to see every chat that touched that file.
+- **Tags.** Add `#tags` to chats and filter by them.
+- **Ask your old chats from Claude Code, Codex or Cursor.** `chatshelf mcp` runs as an MCP server, so your AI tool can search and read past chats ("what did we pick for rate limiting last week?"). See [Use it from your AI tool](#use-it-from-your-ai-tool-mcp).
 - **Read any chat.** Formatted Markdown, code blocks with copy buttons, the tools that ran, find-in-chat, and a "my prompts only" view.
 - **Pick up where you left off.** One click resumes a Claude Code or Codex session in a terminal, or opens the project in Cursor or VS Code.
 - **Fix renamed folders.** Chatshelf spots Claude Code projects whose folder no longer exists, suggests the new folder, and moves the sessions there, with a backup first.
 - **Bookmarks.** Save whole chats or single messages, with notes. Bookmarks made with **Bookmark response** in the Claude Code VS Code extension show up too.
 - **Made for the keyboard.** <kbd>Ctrl</kbd> <kbd>K</kbd> command palette, <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>/</kbd> to search, <kbd>?</kbd> for the full list.
 - **Light and dark theme,** with reduced-motion support and 44px touch targets.
-- **Private by design.** It runs on `127.0.0.1` only, has no dependencies and no telemetry, and never writes to other tools' files.
+- **Private by design.** It runs on `127.0.0.1` only, has no dependencies and no telemetry, and never changes other tools' files.
 
 | Sessions | Conversation |
 | --- | --- |
@@ -139,11 +144,32 @@ A move:
 
 **Backups → Restore** puts a backup back.
 
+## Use it from your AI tool (MCP)
+
+Chatshelf can run as an [MCP](https://modelcontextprotocol.io) server over stdio, so Claude Code, Codex, Cursor or any MCP client can look things up in your past chats. It only reads.
+
+```bash
+claude mcp add chatshelf -- npx -y chatshelf mcp
+```
+
+For other tools, add a stdio server with the command `npx -y chatshelf mcp`. It offers three tools:
+
+| Tool | What it does |
+| --- | --- |
+| `search_chats` | Find chats that contain some words, in your prompts or the replies. Optional `tool` and `project` filters |
+| `list_chats` | Recent chats, optionally for one project folder, tool or the last N days |
+| `read_chat` | One chat as plain text (prompts, replies and the tools that ran) |
+
+The AI tool sees whatever chats it reads, the same as if you pasted them in. Leave it off if that matters for a project.
+
 ## Where Chatshelf keeps its own data
 
 | What | Where |
 | --- | --- |
 | Bookmarks | `~/.local/share/chatshelf/bookmarks.json` |
+| Tags | `~/.local/share/chatshelf/tags.json` |
+| Archive (**Keep every chat**, off until you turn it on) | `~/.local/share/chatshelf/archive/` |
+| Settings | `~/.local/share/chatshelf/settings.json` |
 | Imported ChatGPT and claude.ai chats | `~/.local/share/chatshelf/imports/` |
 | Search index cache | `~/.cache/chatshelf/` |
 
@@ -151,7 +177,7 @@ A move:
 
 - It listens on `127.0.0.1` only and accepts only `127.0.0.1`, `localhost`, `chatshelf.localhost` and the `.localhost` name you choose, which blocks DNS rebinding.
 - Every API call needs a random token that changes each time the server starts.
-- It reads other tools' files but never changes them. The only writes outside its own folders are moving or restoring Claude Code sessions, and only when you click **Move** or **Restore**.
+- It reads other tools' files but never changes them. The archive only copies Claude Code's session files into Chatshelf's own folder. The only writes outside its own folders are moving or restoring Claude Code sessions, and only when you click **Move**, **Restore** or **Restore to Claude Code**.
 - One network request: the **Star on GitHub** button fetches the public star count from `api.github.com`, cached for 6 hours. Nothing about you or your chats is sent.
 
 ## Contributing

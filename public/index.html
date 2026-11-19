@@ -10,9 +10,11 @@
   <script>
     window.CSM_TOKEN = "__TOKEN__";
     (function () {
-      var pref = localStorage.getItem('csm-theme') || 'light';
-      var dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
       var root = document.documentElement;
+      // The VS Code extension sets data-vscode="dark|light" to the editor's theme.
+      var vsc = root.dataset.vscode;
+      var pref = localStorage.getItem('csm-theme') || (vsc ? 'system' : 'light');
+      var dark = pref === 'dark' || (pref === 'system' && (vsc ? vsc === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches));
       root.dataset.theme = dark ? 'dark' : 'light';
       if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.classList.add('motion');
     })();
@@ -48,6 +50,10 @@
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/></symbol>
     <symbol id="i-handoff" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M4 19h16"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M20 16v-3"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9Z"/><circle cx="7.5" cy="7.5" r="1.5"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8Z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6Z"/><path d="m9 12 2 2 4-4"/></symbol>
     <symbol id="i-key" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></symbol>
   </svg>
 
@@ -69,6 +75,7 @@
         <button type="button" class="nav-item" data-view="overview"><svg class="ic"><use href="#i-grid"/></svg>Overview</button>
         <button type="button" class="nav-item" data-view="sessions"><svg class="ic"><use href="#i-chat"/></svg>Sessions <span id="navSessions" class="nav-count"></span></button>
         <button type="button" class="nav-item" data-view="bookmarks"><svg class="ic"><use href="#i-bookmark"/></svg>Bookmarks <span id="navBookmarks" class="nav-count"></span></button>
+        <button type="button" class="nav-item" data-view="usage"><svg class="ic"><use href="#i-chart"/></svg>Usage</button>
         <button type="button" class="nav-item" data-view="projects"><svg class="ic"><use href="#i-folder"/></svg>Projects <span id="navMissing" class="nav-count danger" hidden></span></button>
         <button type="button" class="nav-item" data-view="backups"><svg class="ic"><use href="#i-archive"/></svg>Backups</button>
       </nav>
@@ -106,9 +113,10 @@
           </div>
         </div>
         <p class="made-by">
-          Made by <a href="https://khoaiz.com" target="_blank" rel="noopener noreferrer" title="khoaiz.com">khoaiz</a>
+          <a href="https://github.com/heyKhoaiz/chatshelf" target="_blank" rel="noopener noreferrer" title="Chatshelf on GitHub">Open source</a>
           <span aria-hidden="true">·</span>
-          <a href="https://x.com/khoaizahmmed" target="_blank" rel="noopener noreferrer" aria-label="Follow @khoaizahmmed on X" title="@khoaizahmmed on X" class="x-follow"><svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.32l4.37 5.78L17.75 3Zm-1.08 16.17h1.7L7.4 4.74H5.58l11.09 14.43Z"/></svg>Follow</a>
+          by <a href="https://khoaiz.com" target="_blank" rel="noopener noreferrer" title="khoaiz.com">khoaiz</a>
+          <a href="https://x.com/khoaizahmmed" target="_blank" rel="noopener noreferrer" aria-label="khoaiz on X" title="@khoaizahmmed on X" class="x-link"><svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.32l4.37 5.78L17.75 3Zm-1.08 16.17h1.7L7.4 4.74H5.58l11.09 14.43Z"/></svg></a>
         </p>
       </div>
     </aside>
@@ -141,6 +149,10 @@
           </div>
         </div>
         <div class="right">
+          <div class="panel" id="archivePanel" hidden>
+            <div class="panel-head col"><h2>Keep every chat</h2><p class="small muted" id="archiveSub"></p></div>
+            <div class="panel-body" id="archiveBody"></div>
+          </div>
           <div class="panel">
             <div class="panel-head"><svg class="ic"><use href="#i-chat"/></svg><h2>Activity</h2></div>
             <div class="panel-body">
@@ -180,10 +192,11 @@
               <label class="field grow">
                 <svg class="ic"><use href="#i-search"/></svg>
                 <span class="sr-only">Search sessions</span>
-                <input id="q" type="search" placeholder="Search titles, prompts, folders, IDs…" autocomplete="off">
+                <input id="q" type="search" placeholder="Search prompts, replies, files, #tags, folders, IDs…" autocomplete="off">
                 <kbd>/</kbd>
               </label>
               <select id="proj" aria-label="Filter by project"><option value="">All projects</option></select>
+              <select id="tagFilter" aria-label="Filter by tag" hidden><option value="">All tags</option></select>
               <select id="dateRange" aria-label="Filter by date">
                 <option value="">Any time</option>
                 <option value="today">Today</option>
@@ -204,6 +217,7 @@
             <div class="toolbar">
               <div class="tabs-pill" id="sessTabs" role="group" aria-label="Show"></div>
               <div class="tool-right">
+                <label class="toggle" title="Also look inside the replies and the commands that ran, not only your prompts"><input type="checkbox" id="deepSearch"> <span>Search replies</span></label>
                 <label class="toggle"><input type="checkbox" id="showEmpty"> <span>Show empty</span></label>
                 <div class="seg" role="group" aria-label="Sort">
                   <button type="button" data-sort="new" aria-pressed="true">Newest</button>
@@ -235,6 +249,42 @@
           </div>
           <div class="toolbar"><div class="tabs-pill" id="bmTabs" role="group" aria-label="Show"></div></div>
           <div id="bmList" class="bm-list"></div>
+        </div>
+      </section>
+
+      <!-- Usage -->
+      <section id="view-usage" class="view" aria-label="Usage" hidden>
+        <div class="page-head outer">
+          <h1 class="split">Usage</h1>
+          <p class="muted small rv-text">Tokens your AI tools used, read from the chat files on this computer. Cost is an estimate at Claude API list prices. On a Claude subscription you don't pay this; it shows what the same work would cost on the API. Codex shows tokens only.</p>
+        </div>
+        <div class="toolbar usage-tools">
+          <div class="seg" role="group" aria-label="Period" id="usageRange">
+            <button type="button" data-urange="7" aria-pressed="false">7 days</button>
+            <button type="button" data-urange="30" aria-pressed="true">30 days</button>
+            <button type="button" data-urange="90" aria-pressed="false">90 days</button>
+            <button type="button" data-urange="all" aria-pressed="false">All time</button>
+          </div>
+          <select id="usageTool" aria-label="Filter by tool"><option value="">All tools</option></select>
+        </div>
+        <div class="stats" id="usageStats"></div>
+        <div class="panel">
+          <div class="panel-head col"><h2>Over time</h2><p class="small muted" id="usageChartNote">Tokens per day, by the day a chat was last active</p></div>
+          <div class="panel-body"><div id="usageChart" class="ubars" role="img"></div></div>
+        </div>
+        <div class="usage-grid">
+          <div class="panel">
+            <div class="panel-head col"><h2>By model</h2><p class="small muted">Cache reads are cheap; cache writes cost a bit more than input</p></div>
+            <div id="usageModels" class="utbl"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head col"><h2>By project</h2><p class="small muted">Click a project to see its chats</p></div>
+            <div id="usageProjects" class="rows tight"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head col"><h2>Biggest chats</h2><p class="small muted">By estimated cost, then tokens</p></div>
+          <div id="usageTop" class="rows"></div>
         </div>
       </section>
 
@@ -298,6 +348,14 @@
         </div>
       </div>
       <div id="detailMarks" class="marks" hidden></div>
+      <div class="detail-extra">
+        <div class="tag-edit" id="tagEdit" role="group" aria-label="Tags"></div>
+        <details id="filesBox" class="files-box" hidden>
+          <summary><svg class="ic"><use href="#i-file"/></svg><span id="filesSum">Files changed</span></summary>
+          <p class="small muted">Click a file to see every chat that changed it.</p>
+          <div id="filesList" class="files-list"></div>
+        </details>
+      </div>
       <div class="convo-tools">
         <label class="field grow sm">
           <svg class="ic"><use href="#i-search"/></svg>
@@ -389,6 +447,10 @@
       <span id="dropText"><b>Choose the export .zip</b> or drop it here</span>
     </label>
     <p id="importMsg" class="small" role="status" aria-live="polite"></p>
+    <h3>Search your chats from Claude Code, Codex or Cursor</h3>
+    <p class="small muted">Chatshelf can run as an MCP server, so your AI tool can look up what you decided in earlier chats ("what did we pick for rate limiting last week?"). It only reads. Add it to Claude Code with:</p>
+    <div class="mcp-cmd"><code id="mcpCmd">claude mcp add chatshelf -- npx -y chatshelf mcp</code><button type="button" class="btn ghost sm" data-copymcp><svg class="ic"><use href="#i-copy"/></svg><span>Copy</span></button></div>
+    <p class="small muted">Other tools: add a stdio server with the command <code>npx -y chatshelf mcp</code>. It gives them three tools: <code>search_chats</code>, <code>list_chats</code> and <code>read_chat</code>.</p>
   </dialog>
 
   <!-- Shortcuts -->
@@ -404,7 +466,7 @@
       <div><dt><kbd>Enter</kbd></dt><dd>Open the highlighted session</dd></div>
       <div><dt><kbd>x</kbd></dt><dd>Select the highlighted session</dd></div>
       <div><dt><kbd>b</kbd></dt><dd>Bookmark the highlighted chat (or remove it)</dd></div>
-      <div><dt><kbd>g</kbd> then <kbd>o</kbd> <kbd>s</kbd> <kbd>m</kbd> <kbd>p</kbd> <kbd>b</kbd></dt><dd>Go to Overview, Sessions, Bookmarks, Projects, Backups</dd></div>
+      <div><dt><kbd>g</kbd> then <kbd>o</kbd> <kbd>s</kbd> <kbd>m</kbd> <kbd>u</kbd> <kbd>p</kbd> <kbd>b</kbd></dt><dd>Go to Overview, Sessions, Bookmarks, Usage, Projects, Backups</dd></div>
       <div><dt><kbd>Esc</kbd></dt><dd>Close a panel or clear the selection</dd></div>
       <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>
     </dl>

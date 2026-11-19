@@ -10,10 +10,35 @@ const state = {
   sort: 'new', sessTab: 'all', projTab: 'all', selected: new Set(), detail: null, mover: null,
   msgs: [], hits: [], hitIdx: 0, loaded: false, src: '', sources: [], bookmarks: [], bmIndex: new Map(), external: [], extIndex: new Map(), focusMsg: '',
   pins: new Set(), chatMarks: new Map(), bmTab: 'all',
+  tags: {}, deep: { q: '', src: '', hits: new Map(), busy: false }, archive: null, urange: '30', utool: '',
 };
+
+// ---------- host: the local web server, or the VS Code extension ----------
+// Inside VS Code the page runs in a webview with no server: every call goes to the extension as a
+// message ({ type, id, ...payload }) and comes back as { type: 'reply', id, ok, data | error }.
+const vsc = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+const pending = new Map();
+let seq = 0;
+if (vsc) {
+  addEventListener('message', (e) => {
+    const m = e.data;
+    if (!m || m.type !== 'reply' || !pending.has(m.id)) return;
+    const p = pending.get(m.id);
+    pending.delete(m.id);
+    if (m.ok) p.resolve(m.data); else p.reject(new Error(m.error || 'Something went wrong.'));
+  });
+}
+const host = (type, payload = {}) => new Promise((resolve, reject) => {
+  const id = ++seq;
+  pending.set(id, { resolve, reject });
+  vsc.postMessage({ type, id, ...payload });
+});
+const openUrl = (url) => (vsc ? host('open-url', { url }) : window.open(url, '_blank', 'noopener,noreferrer'));
+const copyText = (text) => (vsc ? host('copy', { text }) : navigator.clipboard.writeText(text));
 
 // ---------- helpers ----------
 async function api(path, body) {
+  if (vsc) return host('api', { method: body ? 'POST' : 'GET', path, body });
   const res = await fetch(path, {
     method: body ? 'POST' : 'GET',
     headers: { 'X-Token': window.CSM_TOKEN, ...(body ? { 'Content-Type': 'application/json' } : {}) },
@@ -71,7 +96,7 @@ function toast(msg, action) {
   toastTimer = setTimeout(() => t.classList.remove('show'), action ? 8000 : 4500);
 }
 async function copy(text, btn) {
-  await navigator.clipboard.writeText(text);
+  await copyText(text);
   const label = btn.querySelector('span') || btn;
   const old = label.textContent;
   label.textContent = 'Copied';
@@ -87,6 +112,7 @@ const timeChip = (ms) => {
 // ---------- GitHub (public project) ----------
 const REPO = 'heyKhoaiz/chatshelf';
 const REPO_URL = `https://github.com/${REPO}`;
+const MCP_CMD = 'claude mcp add chatshelf -- npx -y chatshelf mcp';
 // Shows the star count next to "Star on GitHub". Uses GitHub's public API (no account, nothing about you is sent),
 // cached for 6 hours, and stays hidden when offline.
 async function loadStars() {
@@ -221,6 +247,10 @@ function animateView(view) {
     stagger($('backups'));
   } else if (view === 'bookmarks') {
     stagger($('bmList'), ':scope > .bm-group', 10);
+  } else if (view === 'usage') {
+    stagger($('usageStats'));
+    replay($('usageChart'));
+    stagger($('usageTop'), ':scope > *', 8);
   }
 }
 
@@ -279,18 +309,21 @@ const pinnedSessions = () => state.sessions.filter((s) => state.pins.has(s.uid))
 // ---------- data ----------
 async function load() {
   try {
-    const [data, bm] = await Promise.all([api('/api/projects'), api('/api/bookmarks').catch(() => ({ bookmarks: [] }))]);
+    const [data, bm, tg] = await Promise.all([api('/api/projects'), api('/api/bookmarks').catch(() => ({ bookmarks: [] })), api('/api/tags').catch(() => ({ tags: {} }))]);
+    state.tags = tg.tags || {};
+    state.deep = { q: '', src: '', hits: new Map(), busy: false };
     setBookmarks(bm.bookmarks);
     setExternal(bm.external);
     state.home = data.home;
     state.root = data.root;
     $('backupRoot').textContent = short(data.backupRoot);
     state.projects = data.projects.map((p) => ({ ...p, bytes: p.sessions.reduce((n, s) => n + s.size, 0) }));
-    state.sessions = state.projects.flatMap((p) => p.sessions.map((s) => ({
+    state.sessions = state.projects.flatMap((p) => p.sessions.map((s) => withHay({
       ...s,
+      files: s.files || [],
+      tags: state.tags[s.id] || [],
       project: p,
       uid: `${p.key}|${s.id}`,
-      hay: [s.title, p.cwd, p.key, s.id, s.branch, toolLabel(s.source), ...s.prompts].join('\n').toLowerCase(),
     })));
     state.sessions.sort((a, b) => b.mtime - a.mtime);
     state.byUid = new Map(state.sessions.map((s) => [s.uid, s]));
@@ -303,6 +336,7 @@ async function load() {
     if (deepLink) { openDetail(deepLink); deepLink = ''; }
     if (first && openToolsOnLoad) openSources();
     migratePins();
+    loadArchive();
   } catch (e) {
     $('today').textContent = '';
     $('recent').innerHTML = emptyState('Could not read sessions', esc(e.message), '<button type="button" class="btn" data-reload>Try again</button>');
@@ -314,6 +348,13 @@ async function load() {
 
 function emptyState(title, text, action = '') {
   return `<div class="empty"><div class="empty-ic">${use('search')}</div><p class="empty-title">${esc(title)}</p><p class="small muted">${text}</p>${action}</div>`;
+}
+
+// What the session search box looks through (lower case). Tags match as "#tag".
+function withHay(s) {
+  const p = s.project;
+  s.hay = [s.title, p.cwd, p.key, s.id, s.branch, toolLabel(s.source), ...s.prompts, ...s.files, ...s.tags.map((t) => `#${t}`)].join('\n').toLowerCase();
+  return s;
 }
 
 function renderAll() {
@@ -330,7 +371,9 @@ function renderAll() {
   sel.value = state.projects.some((p) => p.key === current) ? current : '';
   renderSidePins();
   renderTools();
+  renderTagFilter();
   renderOverview();
+  renderUsage();
   renderBookmarks();
   renderSessions();
   renderProjects();
@@ -425,6 +468,7 @@ function renderOverview() {
 function sessionRow(s, q, selectable) {
   const p = s.project;
   const match = q && !s.title.toLowerCase().includes(q) ? s.prompts.find((x) => x.toLowerCase().includes(q)) : '';
+  const deep = q && !match && !s.title.toLowerCase().includes(q) ? deepHit(s, q) : null;
   const pinned = state.pins.has(s.uid);
   const inner = `
       <span class="row-title">${pinned && !selectable ? `<span class="pin-dot" title="Bookmarked chat">${ICON.bookmark}</span>` : ''}${hl(s.title, q)}</span>
@@ -433,8 +477,11 @@ function sessionRow(s, q, selectable) {
         ${s.branch ? `<span class="sep">·</span><span class="proj">${ICON.branch}${esc(s.branch)}</span>` : ''}
         <span class="sep">·</span><span>${s.promptCount ? plural(s.promptCount, 'prompt') : 'empty'}</span>
         ${p.missing ? `<span class="sep">·</span><span class="danger-t">${ICON.warn}folder missing</span>` : ''}
+        ${s.archived === 'only' ? `<span class="sep">·</span><span class="arch-t" title="Claude Code deleted this chat; Chatshelf kept a copy">${use('shield')}archive only</span>` : ''}
+        ${s.tags.map((t) => `<span class="tag">#${hl(t, q.replace(/^#/, ''))}</span>`).join('')}
       </span>
       ${match ? `<span class="row-last">${ICON.reply}<span>“${hl(match.slice(0, 140), q)}”</span></span>`
+        : deep ? `<span class="row-last deep"><b>${deep.role === 'user' ? 'You' : esc(assistantOf(s.source)[0])}:</b> <span>${hl(deep.snippet, q.split(/\s+/)[0])}</span></span>`
         : s.last ? `<span class="row-last" title="Your last prompt">${ICON.reply}<span>${esc(s.last.slice(0, 140))}</span></span>` : ''}
       <span class="row-side">${timeChip(s.mtime)}</span>`;
   if (!selectable) return `<button type="button" class="row${p.missing ? ' missing' : ''}" data-session="${esc(s.uid)}">${inner}</button>`;
@@ -452,21 +499,202 @@ function filteredSessions() {
   const showEmpty = $('showEmpty').checked;
   const weekAgo = Date.now() - 7 * DAY;
   const range = dateBounds();
-  const pool = state.sessions.filter((s) => (!state.src || s.source === state.src) && (!key || s.project.key === key) && (!range || (s.mtime >= range[0] && s.mtime < range[1])) && (!q || s.hay.includes(q)));
+  const tag = $('tagFilter').value;
+  const deepOn = deepEnabled() && state.deep.q === q && q.length >= 3;
+  const pool = state.sessions.filter((s) => (!state.src || s.source === state.src) && (!key || s.project.key === key) && (!tag || s.tags.includes(tag))
+    && (!range || (s.mtime >= range[0] && s.mtime < range[1])) && (!q || s.hay.includes(q) || (deepOn && state.deep.hits.has(s.uid))));
   const visible = pool.filter((s) => showEmpty || s.promptCount > 0);
   const counts = {
     all: visible.length,
     pinned: visible.filter((s) => state.pins.has(s.uid)).length,
     week: visible.filter((s) => s.mtime >= weekAgo).length,
     missing: visible.filter((s) => s.project.missing).length,
+    archived: visible.filter((s) => s.archived === 'only').length,
   };
   const emptyHidden = pool.length - visible.length;
   let rows = state.sessTab === 'pinned' ? visible.filter((s) => state.pins.has(s.uid))
     : state.sessTab === 'week' ? visible.filter((s) => s.mtime >= weekAgo)
-      : state.sessTab === 'missing' ? visible.filter((s) => s.project.missing) : visible;
+      : state.sessTab === 'missing' ? visible.filter((s) => s.project.missing)
+        : state.sessTab === 'archived' ? visible.filter((s) => s.archived === 'only') : visible;
   if (state.sort === 'old') rows = rows.slice().reverse();
   if (state.sort === 'big') rows = rows.slice().sort((a, b) => b.promptCount - a.promptCount);
   return { rows, q, counts, emptyHidden };
+}
+
+// ---------- search inside replies (server side, debounced) ----------
+const deepEnabled = () => localStorage.getItem('csm-deep') !== '0';
+let deepTimer;
+let deepSeq = 0;
+function queueDeep(q) {
+  if (!deepEnabled() || q.length < 3 || (state.deep.q === q && !state.deep.busy)) return;
+  clearTimeout(deepTimer);
+  deepTimer = setTimeout(async () => {
+    const mine = ++deepSeq;
+    state.deep.busy = true;
+    try {
+      const { hits } = await api(`/api/search?q=${encodeURIComponent(q)}&limit=1000`);
+      if (mine !== deepSeq) return;
+      state.deep = { q, hits: new Map(hits.map((h) => [`${h.key}|${h.id}`, h])), busy: false };
+    } catch (e) {
+      if (mine !== deepSeq) return;
+      state.deep = { q, hits: new Map(), busy: false };
+      toast(e.message);
+    }
+    if ($('q').value.trim().toLowerCase() === q) renderSessions();
+  }, 350);
+}
+const deepHit = (s, q) => (state.deep.q === q ? state.deep.hits.get(s.uid) : null);
+
+// ---------- tags ----------
+function renderTagFilter() {
+  const all = [...new Set(state.sessions.flatMap((s) => s.tags))].sort();
+  const cur = $('tagFilter').value;
+  $('tagFilter').hidden = !all.length;
+  $('tagFilter').innerHTML = '<option value="">All tags</option>' + all.map((t) => `<option value="${esc(t)}">#${esc(t)} (${state.sessions.filter((s) => s.tags.includes(t)).length})</option>`).join('');
+  $('tagFilter').value = all.includes(cur) ? cur : '';
+}
+function renderTagEdit() {
+  const s = state.detail;
+  if (!s) return;
+  $('tagEdit').innerHTML = `${use('tag')}` + s.tags.map((t) => `<span class="tag big">#${esc(t)}<button type="button" data-untag="${esc(t)}" aria-label="Remove tag ${esc(t)}" title="Remove tag">${use('x')}</button></span>`).join('') +
+    `<label class="tag-add"><span class="sr-only">Add a tag</span><input id="tagInput" type="text" maxlength="32" placeholder="${s.tags.length ? 'Add tag' : 'Add a tag, like bug or idea'}" list="tagList" autocomplete="off" spellcheck="false"></label>` +
+    `<datalist id="tagList">${[...new Set(state.sessions.flatMap((x) => x.tags))].filter((t) => !s.tags.includes(t)).map((t) => `<option value="${esc(t)}">`).join('')}</datalist>`;
+}
+async function setTags(s, tags) {
+  try {
+    const r = await api('/api/tags', { sessionId: s.id, tags });
+    if (r.tags.length) state.tags[s.id] = r.tags; else delete state.tags[s.id];
+    for (const x of state.sessions) if (x.id === s.id) { x.tags = r.tags; withHay(x); }
+    renderTagEdit();
+    renderTagFilter();
+    renderSessions();
+    return true;
+  } catch (e) { toast(e.message); return false; }
+}
+
+// ---------- archive: keep a copy of every Claude Code chat ----------
+async function loadArchive() {
+  try { state.archive = await api('/api/archive'); } catch { state.archive = null; }
+  renderArchive();
+}
+function renderArchive() {
+  const a = state.archive;
+  $('archivePanel').hidden = !a || !a.total && !a.only;
+  if (!a) return;
+  const dir = `<code>${esc(short(a.dir))}</code>`;
+  if (a.auto) {
+    $('archiveSub').textContent = 'On: Chatshelf keeps a copy of each Claude Code chat';
+    $('archiveBody').innerHTML = `<div class="good">${use('shield')}${plural(a.kept, 'chat')} kept safe${a.only ? `, ${a.only} of them only here now` : ''}.</div>
+      <p class="small muted">Claude Code removes chats after ${a.retentionDays} days without use. The copies are in ${dir}, and you can restore any of them.</p>
+      <div class="arch-actions">${a.only ? '<button type="button" class="btn ghost sm" data-sesstab-go="archived">Show archived chats</button>' : ''}<button type="button" class="link small" data-archive="off">Turn off</button></div>`;
+    return;
+  }
+  $('archiveSub').textContent = `Claude Code removes chats after ${a.retentionDays} days without use`;
+  $('archiveBody').innerHTML = `${a.atRisk ? `<p class="arch-warn">${ICON.warn}<span><b>${plural(a.atRisk, 'chat')}</b> will be removed within a week.</span></p>` : ''}
+    <p class="small">Keep a copy of all ${plural(a.total, 'chat')} (${size(a.totalBytes)}) in ${dir}. New and changed chats are copied each time Chatshelf looks. Claude Code's own files are never changed.</p>
+    ${a.only ? `<p class="small muted">${plural(a.only, 'chat')} already only in the archive.</p>` : ''}
+    <div class="arch-actions"><button type="button" class="btn accent sm" data-archive="on">${use('shield')}Keep every chat</button></div>`;
+}
+async function setArchive(mode, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api(mode === 'run' ? '/api/archive/run' : '/api/archive/settings', mode === 'run' ? {} : { auto: mode === 'on' });
+    state.archive = r;
+    toast(mode === 'off' ? 'Archive turned off. Copies already made stay where they are.' : `Archive on. ${plural(r.kept, 'chat')} kept safe.`);
+    await load();
+  } catch (e) { toast(e.message); } finally { if (btn) btn.disabled = false; }
+}
+
+// ---------- usage ----------
+const tok = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(Math.round(n)));
+const money = (c) => (c === null || c === undefined ? '—' : c < 0.01 && c > 0 ? '<$0.01' : `$${c >= 100 ? Math.round(c).toLocaleString() : c.toFixed(2)}`);
+const tokensOf = (u) => (u ? u.in + u.out + u.cw + (u.cw1h || 0) + u.cr : 0);
+function usageTitle(u) {
+  return `Input ${tok(u.in)} · output ${tok(u.out)} · cache writes ${tok(u.cw + (u.cw1h || 0))} · cache reads ${tok(u.cr)}${u.cost !== null ? ` · about ${money(u.cost)} at API prices` : ''}`;
+}
+function usageSessions() {
+  const days = state.urange === 'all' ? Infinity : Number(state.urange);
+  const from = days === Infinity ? 0 : Date.now() - days * DAY;
+  return state.sessions.filter((s) => s.usage && s.mtime >= from && (!state.utool || s.source === state.utool));
+}
+function renderUsage() {
+  const withUsage = state.sessions.filter((s) => s.usage);
+  const tools = [...new Set(withUsage.map((s) => s.source))];
+  $('usageTool').innerHTML = '<option value="">All tools</option>' + tools.map((t) => `<option value="${t}">${esc(toolLabel(t))}</option>`).join('');
+  $('usageTool').value = tools.includes(state.utool) ? state.utool : '';
+  document.querySelectorAll('[data-urange]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.urange === state.urange)));
+  const list = usageSessions();
+  const sum = { in: 0, out: 0, cw: 0, cw1h: 0, cr: 0, cost: 0, priced: 0 };
+  const models = new Map();
+  const projects = new Map();
+  for (const s of list) {
+    const u = s.usage;
+    for (const k of ['in', 'out', 'cw', 'cw1h', 'cr']) sum[k] += u[k] || 0;
+    if (u.cost !== null) { sum.cost += u.cost; sum.priced++; }
+    for (const [m, mu] of Object.entries(u.models || {})) {
+      const t = models.get(m) || { in: 0, out: 0, cw: 0, cw1h: 0, cr: 0, cost: null, chats: 0 };
+      for (const k of ['in', 'out', 'cw', 'cw1h', 'cr']) t[k] += mu[k] || 0;
+      if (mu.cost !== null) t.cost = (t.cost || 0) + mu.cost;
+      t.chats++;
+      models.set(m, t);
+    }
+    const pr = projects.get(s.project.key) || { p: s.project, tokens: 0, cost: null, chats: 0 };
+    pr.tokens += tokensOf(u);
+    if (u.cost !== null) pr.cost = (pr.cost || 0) + u.cost;
+    pr.chats++;
+    projects.set(s.project.key, pr);
+  }
+  const total = tokensOf(sum);
+  const stat = (num, label, foot) => `<div class="stat"><div class="stat-top"><div class="stat-num">${num}</div><div class="stat-label">${label}</div></div><div class="stat-foot"><span>${foot}</span></div></div>`;
+  const inputSide = sum.in + sum.cw + sum.cw1h + sum.cr;
+  $('usageStats').innerHTML = !withUsage.length ? '' :
+    stat(tok(total), 'Tokens', `in ${plural(list.length, 'chat')}`) +
+    stat(tok(sum.out), 'Written by the AI', 'output tokens') +
+    stat(`${inputSide ? Math.round((sum.cr / inputSide) * 100) : 0}%`, 'Read from cache', 'of input, at a tenth of the price') +
+    stat(sum.priced ? money(sum.cost) : '—', 'Estimated API cost', sum.priced ? `${plural(sum.priced, 'Claude chat')}, list prices` : 'no Claude chats in this period');
+
+  if (!withUsage.length) {
+    $('usageChart').innerHTML = emptyState('No token counts yet', 'Claude Code and Codex save token counts in their chat files. Other tools don\'t, so they don\'t show up here.');
+    ['usageModels', 'usageProjects', 'usageTop'].forEach((id) => { $(id).innerHTML = ''; });
+    return;
+  }
+  // Bars: per day for up to 90 days, per month for all time.
+  const monthly = state.urange === 'all';
+  const buckets = new Map();
+  const keyOf = (ms) => { const d = new Date(ms); return monthly ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : ymd(ms); };
+  for (const s of list) { const k = keyOf(s.mtime); const b = buckets.get(k) || { t: 0, c: 0, n: 0 }; b.t += tokensOf(s.usage); b.c += s.usage.cost || 0; b.n++; buckets.set(k, b); }
+  const keys = [];
+  if (monthly) {
+    const first = list.length ? Math.min(...list.map((s) => s.mtime)) : Date.now();
+    for (let d = new Date(first); d <= new Date(); d.setMonth(d.getMonth() + 1, 1)) keys.push(keyOf(d.getTime()));
+  } else {
+    for (let i = Number(state.urange) - 1; i >= 0; i--) keys.push(ymd(Date.now() - i * DAY));
+  }
+  const max = Math.max(1, ...keys.map((k) => (buckets.get(k) || { t: 0 }).t));
+  const label = (k) => (monthly ? new Date(`${k}-01T00:00`).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : new Date(`${k}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+  $('usageChartNote').textContent = monthly ? 'Tokens per month, by the day a chat was last active' : 'Tokens per day, by the day a chat was last active';
+  $('usageChart').innerHTML = `<div class="ubar-row">${keys.map((k, i) => {
+    const b = buckets.get(k) || { t: 0, c: 0, n: 0 };
+    return `<span class="ubar${b.t ? '' : ' zero'}" style="--h:${Math.max(b.t ? 3 : 0, (b.t / max) * 100)}%; --i:${i}" title="${esc(label(k))}: ${tok(b.t)} tokens in ${plural(b.n, 'chat')}${b.c ? ` · about ${money(b.c)}` : ''}"${b.n && !monthly ? ` data-day="${k}"` : ''}></span>`;
+  }).join('')}</div><div class="ubar-axis"><span>${esc(label(keys[0]))}</span><span>${esc(label(keys[keys.length - 1]))}</span></div>`;
+  $('usageChart').setAttribute('aria-label', `${tok(total)} tokens over ${monthly ? 'all time' : `the last ${state.urange} days`}. Busiest: ${esc(label(keys.reduce((a, k) => ((buckets.get(k) || { t: 0 }).t > (buckets.get(a) || { t: 0 }).t ? k : a), keys[0])))}.`);
+
+  const mrows = [...models].sort((a, b) => (b[1].cost || 0) - (a[1].cost || 0) || tokensOf(b[1]) - tokensOf(a[1]));
+  $('usageModels').innerHTML = `<div class="uhead"><span>Model</span><span>Chats</span><span>Input</span><span>Output</span><span>Cache write</span><span>Cache read</span><span>Est. cost</span></div>` +
+    mrows.map(([m, u]) => `<div class="urow"><span class="mono-s">${esc(m)}</span><span>${u.chats}</span><span>${tok(u.in)}</span><span>${tok(u.out)}</span><span>${tok(u.cw + u.cw1h)}</span><span>${tok(u.cr)}</span><span>${money(u.cost)}</span></div>`).join('');
+  const prows = [...projects.values()].sort((a, b) => (b.cost || 0) - (a.cost || 0) || b.tokens - a.tokens).slice(0, 8);
+  const pmax = Math.max(1, ...prows.map((r) => r.tokens));
+  $('usageProjects').innerHTML = prows.map((r, i) => `<button type="button" class="row" data-show="${esc(r.p.key)}">
+      <div class="row-title">${esc(projName(r.p))} ${toolBadge(r.p.source)}</div>
+      <div class="row-side"><span class="muted small">${tok(r.tokens)} · ${money(r.cost)}</span></div>
+      <div class="bar-mini"><span style="width:${Math.max(4, (r.tokens / pmax) * 100)}%; --i:${i}"></span></div>
+    </button>`).join('');
+  const top = list.slice().sort((a, b) => (b.usage.cost || 0) - (a.usage.cost || 0) || tokensOf(b.usage) - tokensOf(a.usage)).slice(0, 8);
+  $('usageTop').innerHTML = top.map((s) => `<button type="button" class="row" data-session="${esc(s.uid)}" title="${esc(usageTitle(s.usage))}">
+      <span class="row-title">${esc(s.title)}</span>
+      <span class="row-meta">${toolBadge(s.source)}<span class="proj">${ICON.folder}${esc(projName(s.project))}</span><span class="sep">·</span><span>${ago(s.mtime)}</span></span>
+      <span class="row-side"><span class="chip">${tok(tokensOf(s.usage))} tokens</span><b class="ucost">${money(s.usage.cost)}</b></span>
+    </button>`).join('');
 }
 
 // ---------- date filter ----------
@@ -520,11 +748,13 @@ function dayLabel(ms) {
 
 function renderSessions() {
   const { rows, q, counts, emptyHidden } = filteredSessions();
-  $('sessTabs').innerHTML = [['all', 'All'], ['pinned', 'Bookmarked'], ['missing', 'Folder missing']]
+  queueDeep(q);
+  $('sessTabs').innerHTML = [['all', 'All'], ['pinned', 'Bookmarked'], ['missing', 'Folder missing'], ['archived', 'Archive only']]
     .filter(([k]) => k === 'all' || counts[k] || state.sessTab === k)
     .map(([k, label]) => `<button type="button" data-sesstab="${k}" aria-pressed="${state.sessTab === k}">${label} <span>${counts[k]}</span></button>`).join('');
   $('count').textContent = `Showing ${Math.min(rows.length, state.shown).toLocaleString()} of ${plural(rows.length, 'session')}` + (dateBounds() ? ` · ${dateLabel()}` : '') +
-    (emptyHidden && !$('showEmpty').checked ? ` · ${emptyHidden} empty hidden` : '');
+    (emptyHidden && !$('showEmpty').checked ? ` · ${emptyHidden} empty hidden` : '') +
+    (state.deep.busy ? ' · searching inside replies…' : '');
   const visible = rows.slice(0, state.shown);
   $('selectAll').checked = visible.length > 0 && visible.every((s) => state.selected.has(s.uid));
   $('selectAll').indeterminate = !$('selectAll').checked && visible.some((s) => state.selected.has(s.uid));
@@ -538,10 +768,10 @@ function renderSessions() {
     }
     html += sessionRow(s, q, true);
   }
-  const filtered = q || $('proj').value || state.sessTab !== 'all' || state.src || dateBounds();
+  const filtered = q || $('proj').value || $('tagFilter').value || state.sessTab !== 'all' || state.src || dateBounds();
   $('list').innerHTML = html || (state.sessions.length
     ? emptyState(q ? `No sessions match “${q}”` : 'Nothing here', q
-      ? 'Try fewer words, a folder name, or part of a session ID. Search also looks inside every prompt you typed.'
+      ? (deepEnabled() ? 'Try fewer words, a folder name, or part of a session ID. Search looks inside your prompts and the replies.' : 'Try fewer words. Turn on <b>Search replies</b> to also look inside the answers.')
       : 'Try another tab or project filter.', filtered ? '<button type="button" class="btn ghost" data-clear-filters>Clear filters</button>' : '')
     : emptyState('No sessions found', 'Run <code>claude</code> in a folder and come back.'));
   $('more').hidden = rows.length <= state.shown;
@@ -745,7 +975,7 @@ function syncPinButton() {
   $('detailPin').title = on ? 'Remove chat bookmark' : 'Bookmark this chat';
 }
 
-async function openDetail(uid, focusUuid = '') {
+async function openDetail(uid, focusUuid = '', findText = '') {
   const s = state.byUid.get(uid) || state.sessions.find((x) => x.id === String(uid).split('|').pop());
   if (!s) return;
   const p = s.project;
@@ -762,8 +992,17 @@ async function openDetail(uid, focusUuid = '') {
     toolBadge(s.source),
     `<span class="chip">${plural(s.promptCount, 'prompt')}</span>`,
     `<span class="chip">${size(s.size)}</span>`,
+    s.usage ? `<span class="chip" title="${esc(usageTitle(s.usage))}">${use('chart')}${tok(tokensOf(s.usage))} tokens${s.usage.cost !== null ? ` · ~${money(s.usage.cost)}` : ''}</span>` : '',
+    s.archived === 'only' ? `<span class="chip arch">${use('shield')}archive only</span>` : s.archived === 'kept' ? `<span class="chip ok" title="Chatshelf keeps a copy of this chat">${use('shield')}kept</span>` : '',
     `<span class="chip mono-s">${esc(s.id)}</span>`,
   ].join('');
+  renderTagEdit();
+  const files = s.files || [];
+  $('filesBox').hidden = !files.length;
+  $('filesBox').open = false;
+  $('filesSum').textContent = `Files changed (${files.length})`;
+  const rel = (f) => (p.cwd && f.startsWith(p.cwd + '/') ? f.slice(p.cwd.length + 1) : short(f));
+  $('filesList').innerHTML = files.map((f) => `<button type="button" class="file-btn" data-file="${esc(f)}" title="Show every chat that changed ${esc(short(f))}">${use('file')}<span>${esc(rel(f))}</span></button>`).join('');
   const ri = resumeInfo(s);
   $('resumeLabel').textContent = ri.label;
   $('detailCmd').textContent = ri.cmd;
@@ -774,8 +1013,19 @@ async function openDetail(uid, focusUuid = '') {
   $('detailOpen').querySelector('use').setAttribute('href', ri.kind === 'url' ? '#i-link' : ri.kind === 'app' ? '#i-folder' : '#i-terminal');
   $('resumeNote').hidden = !ri.note;
   $('resumeNote').textContent = ri.note || '';
-  $('detailMove').hidden = s.source !== 'claude';
+  $('detailMove').hidden = s.source !== 'claude' || s.archived === 'only';
   $('detailCopy').hidden = !ri.cmd;
+  if (s.archived === 'only') {
+    $('resumeLabel').textContent = 'Only in Chatshelf\'s archive';
+    $('detailCmd').hidden = true;
+    $('detailCopy').hidden = true;
+    $('detailOpenLabel').textContent = 'Restore to Claude Code';
+    $('detailOpen').disabled = false;
+    $('detailOpen').title = 'Copies the chat back so claude --resume finds it';
+    $('detailOpen').querySelector('use').setAttribute('href', '#i-shield');
+    $('resumeNote').hidden = false;
+    $('resumeNote').textContent = 'Claude Code removed this chat. Restoring copies it back into Claude Code\'s folder, so you can resume it there.';
+  }
   syncPinButton();
   $('find').value = '';
   $('findCount').textContent = '';
@@ -791,7 +1041,8 @@ async function openDetail(uid, focusUuid = '') {
     state.msgs = messages;
     $('transcript').innerHTML = messages.map(renderMsg).join('') || emptyState('No readable messages', 'This session has no text messages, only tool activity.');
     renderMarks();
-    if (state.focusMsg) { scrollToMsg(state.focusMsg); state.focusMsg = ''; } else stagger($('transcript'), ':scope > .msg', 8);
+    if (findText) { $('find').value = findText; findInConvo(findText); }
+    else if (state.focusMsg) { scrollToMsg(state.focusMsg); state.focusMsg = ''; } else stagger($('transcript'), ':scope > .msg', 8);
   } catch (e) {
     $('transcript').innerHTML = `<p class="error">${esc(e.message)}</p>`;
   } finally {
@@ -864,15 +1115,23 @@ async function openTerminal() {
   const b = $('detailOpen');
   b.disabled = true;
   try {
+    if (s.archived === 'only') {
+      await api('/api/archive/restore', { key: s.project.key, id: s.id });
+      toast('Restored. claude --resume can find this chat again.');
+      await load();
+      openDetail(s.uid);
+      return;
+    }
     const ri = resumeInfo(s);
-    if (ri.kind === 'url') { window.open(ri.url, '_blank', 'noopener,noreferrer'); return; }
+    if (ri.kind === 'url') { openUrl(ri.url); return; }
     const r = await api('/api/open-terminal', { key: s.project.key, id: s.id });
     toast(r.app ? `Opened the project in ${r.terminal}.` : `Opened in ${r.terminal}.`);
   } catch (e) {
     toast(e.message);
   } finally {
     const ri = resumeInfo(s);
-    b.disabled = ri.kind === 'url' ? !ri.url : !s.project.exists;
+    if (s.archived !== 'only') b.disabled = ri.kind === 'url' ? !ri.url : !s.project.exists;
+    else b.disabled = false;
   }
 }
 
@@ -928,9 +1187,13 @@ async function uploadExport(file) {
   $('importMsg').textContent = `Reading ${file.name} (${size(file.size)})…`;
   $('drop').classList.add('busy');
   try {
-    const res = await fetch('/api/import', { method: 'POST', headers: { 'X-Token': window.CSM_TOKEN, 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name).slice(0, 200) }, body: file });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Import failed (${res.status})`);
+    let data;
+    if (vsc) data = await host('api', { method: 'POST', path: '/api/import', file: await file.arrayBuffer(), filename: file.name });
+    else {
+      const res = await fetch('/api/import', { method: 'POST', headers: { 'X-Token': window.CSM_TOKEN, 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name).slice(0, 200) }, body: file });
+      data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Import failed (${res.status})`);
+    }
     $('importMsg').className = 'small ok-t';
     $('importMsg').textContent = `Imported ${plural(data.total, 'chat')} from ${data.label}: ${data.added} new, ${data.updated} updated.`;
     await load();
@@ -1239,15 +1502,24 @@ async function goHandoff() {
   $('hoError').textContent = '';
   if (!text) { $('hoError').textContent = 'The handoff is empty.'; return; }
   if (opt.kind === 'copy') {
-    await navigator.clipboard.writeText(text);
+    await copyText(text);
     $('handoff').close();
     toast('Handoff copied. Paste it as the first message in the other tool.');
     return;
   }
   if (opt.kind === 'download') {
+    const name = `handoff-${s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'chat'}.md`;
+    if (vsc) {
+      try {
+        if (!(await host('save', { name, text })).saved) return;
+      } catch (e) { $('hoError').textContent = e.message; return; }
+      $('handoff').close();
+      toast('Handoff saved.');
+      return;
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
-    a.download = `handoff-${s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'chat'}.md`;
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     $('handoff').close();
@@ -1402,15 +1674,18 @@ function paletteItems(q) {
     { group: 'Go to', label: 'Overview', hint: 'g o', run: () => setView('overview'), icon: 'grid' },
     { group: 'Go to', label: 'Sessions', hint: 'g s', run: () => setView('sessions'), icon: 'chat' },
     { group: 'Go to', label: 'Bookmarks', hint: 'g m', run: () => setView('bookmarks'), icon: 'bookmark' },
+    { group: 'Go to', label: 'Usage and cost', hint: 'g u', run: () => setView('usage'), icon: 'chart' },
     { group: 'Go to', label: 'Projects', hint: 'g p', run: () => setView('projects'), icon: 'folder' },
     { group: 'Go to', label: 'Backups', hint: 'g b', run: () => setView('backups'), icon: 'archive' },
     { group: 'Actions', label: 'Tools & import', run: () => openSources(), icon: 'plug' },
-    { group: 'Chatshelf', label: 'Star Chatshelf on GitHub', run: () => window.open(REPO_URL, '_blank', 'noopener,noreferrer'), icon: 'star' },
+    { group: 'Chatshelf', label: 'Star Chatshelf on GitHub', run: () => openUrl(REPO_URL), icon: 'star' },
     { group: 'Chatshelf', label: 'About Chatshelf', run: () => $('shortcuts').showModal(), icon: 'star' },
-    { group: 'Chatshelf', label: 'Follow @khoaizahmmed on X', run: () => window.open('https://x.com/khoaizahmmed', '_blank', 'noopener,noreferrer'), icon: 'link' },
-    { group: 'Chatshelf', label: 'Report a bug or suggest a feature', run: () => window.open(`${REPO_URL}/issues/new/choose`, '_blank', 'noopener,noreferrer'), icon: 'chat' },
-    { group: 'Chatshelf', label: 'Contribute: add support for another tool', run: () => window.open(`${REPO_URL}/blob/main/CONTRIBUTING.md`, '_blank', 'noopener,noreferrer'), icon: 'plug' },
+    { group: 'Chatshelf', label: 'Author on X (@khoaizahmmed)', run: () => openUrl('https://x.com/khoaizahmmed'), icon: 'link' },
+    { group: 'Chatshelf', label: 'Report a bug or suggest a feature', run: () => openUrl(`${REPO_URL}/issues/new/choose`), icon: 'chat' },
+    { group: 'Chatshelf', label: 'Contribute: add support for another tool', run: () => openUrl(`${REPO_URL}/blob/main/CONTRIBUTING.md`), icon: 'plug' },
     { group: 'Actions', label: 'Import a ChatGPT or claude.ai export', run: () => openSources(), icon: 'upload' },
+    { group: 'Actions', label: 'Keep every chat (archive)', run: () => setView('overview'), icon: 'shield' },
+    { group: 'Actions', label: 'Copy the MCP setup command for Claude Code', run: () => copyText(MCP_CMD).then(() => toast('Copied. Run it in a terminal to let Claude Code search your chats.')), icon: 'plug' },
     { group: 'Actions', label: 'Find missing folders', run: () => { state.projTab = 'missing'; renderProjects(); setView('projects'); }, icon: 'search' },
     { group: 'Actions', label: 'Light theme', run: () => applyTheme('light'), icon: 'sun' },
     { group: 'Actions', label: 'Dark theme', run: () => applyTheme('dark'), icon: 'moon' },
@@ -1426,8 +1701,10 @@ function paletteItems(q) {
     .map((b) => ({ group: 'Bookmarks', label: b.note || b.title, sub: b.note ? `Chat: ${b.title}` : 'Bookmarked chat', run: () => { const x = sessionById(b.sessionId); if (x) openDetail(x.uid); }, icon: 'bookmark' })) : [];
   const marks = ql ? msgMarks().filter((b) => [b.text, b.note, b.title].join('\n').toLowerCase().includes(ql)).slice(0, 5)
     .map((b) => ({ group: 'Bookmarks', label: b.note || stripMd(b.text) || 'Bookmarked message', sub: [b.title || (sessionById(b.sessionId) || {}).title, b.readOnly ? b.source : ''].filter(Boolean).join(' · '), run: () => openBookmark(b.id), icon: 'bookmark' })) : [];
+  const tagHits = ql ? [...new Set(state.sessions.flatMap((s) => s.tags))].filter((t) => t.includes(ql.replace(/^#/, ''))).slice(0, 4)
+    .map((t) => ({ group: 'Tags', label: `#${t}`, sub: plural(state.sessions.filter((s) => s.tags.includes(t)).length, 'chat'), run: () => { $('tagFilter').value = t; searchFor(''); }, icon: 'tag' })) : [];
   const acts = actions.filter((a) => !ql || a.label.toLowerCase().includes(ql));
-  return [...sessions, ...chatMarksHit, ...marks, ...projects, ...acts];
+  return [...sessions, ...tagHits, ...chatMarksHit, ...marks, ...projects, ...acts];
 }
 function renderPalette() {
   const q = $('palQ').value;
@@ -1466,10 +1743,13 @@ function movePalette(d) {
 }
 
 // ---------- theme ----------
+// In VS Code, "System" follows the editor's colour theme (its class on <body>) instead of the OS.
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+const systemDark = () => (vsc ? /\bvscode-(dark|high-contrast)\b/.test(document.body.className) && !document.body.classList.contains('vscode-high-contrast-light') : darkQuery.matches);
+const DEFAULT_THEME = vsc ? 'system' : 'light';
 function applyTheme(pref, animate = true) {
   localStorage.setItem('csm-theme', pref);
-  const dark = pref === 'dark' || (pref === 'system' && darkQuery.matches);
+  const dark = pref === 'dark' || (pref === 'system' && systemDark());
   const set = () => {
     root.dataset.theme = dark ? 'dark' : 'light';
     document.querySelectorAll('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeSet === pref)));
@@ -1477,10 +1757,12 @@ function applyTheme(pref, animate = true) {
   if (animate && motionOn() && document.startViewTransition && root.dataset.theme !== (dark ? 'dark' : 'light')) document.startViewTransition(set);
   else set();
 }
-darkQuery.addEventListener('change', () => { if (localStorage.getItem('csm-theme') === 'system') applyTheme('system'); });
+const followSystem = () => { if ((localStorage.getItem('csm-theme') || DEFAULT_THEME) === 'system') applyTheme('system'); };
+if (vsc) new MutationObserver(followSystem).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+else darkQuery.addEventListener('change', followSystem);
 
 // ---------- navigation ----------
-const VIEWS = ['overview', 'sessions', 'bookmarks', 'projects', 'backups'];
+const VIEWS = ['overview', 'sessions', 'bookmarks', 'usage', 'projects', 'backups'];
 function setView(view) {
   const changed = state.view !== view;
   state.view = view;
@@ -1530,9 +1812,15 @@ document.addEventListener('click', async (e) => {
   else if ('sources' in d) openSources();
   else if (d.src !== undefined) { state.src = d.src; state.shown = PAGE; renderTools(); renderSessions(); stagger($('list'), ':scope > .row, :scope > .date-head', 12); if (state.view !== 'sessions') setView('sessions'); }
   else if (d.rmimport) removeImport(d.rmimport);
+  else if ('copymcp' in d) copy(MCP_CMD, t);
+  else if (d.archive) setArchive(d.archive, t);
+  else if (d.sesstabGo) { $('q').value = ''; state.sessTab = d.sesstabGo; state.shown = PAGE; renderSessions(); setView('sessions'); }
+  else if (d.urange) { state.urange = d.urange; renderUsage(); replay($('usageChart')); }
+  else if (d.untag && state.detail) setTags(state.detail, state.detail.tags.filter((x) => x !== d.untag));
+  else if (d.file) { $('detail').close(); $('q').value = ''; searchFor(d.file.toLowerCase()); toast(`Chats that changed ${base(d.file)}`); }
   else if (d.ho) { ho.target = d.ho; renderHandoffTargets(); }
   else if ('reload' in d) { skeletons(); load(); }
-  else if ('clearFilters' in d) { $('q').value = ''; $('proj').value = ''; state.sessTab = 'all'; state.src = ''; renderTools(); setDateFilter(''); }
+  else if ('clearFilters' in d) { $('q').value = ''; $('proj').value = ''; $('tagFilter').value = ''; state.sessTab = 'all'; state.src = ''; renderTools(); setDateFilter(''); }
   else if ('dateClear' in d) setDateFilter('');
   else if ('copycode' in d) copy(t.closest('.code').querySelector('code').textContent, t);
   else if (d.copymsg) copy(state.msgs[Number(d.copymsg)].text, t);
@@ -1545,7 +1833,13 @@ document.addEventListener('click', async (e) => {
   else if (d.jump) scrollToMsg(d.jump);
   else if (d.bmtab) { state.bmTab = d.bmtab; renderBookmarks(); stagger($('bmList'), ':scope > *', 10); }
   else if (d.view) setView(d.view);
-  else if (d.session) openDetail(d.session);
+  else if (d.session) {
+    // From a search, open at the first match.
+    const q = state.view === 'sessions' ? $('q').value.trim().toLowerCase() : '';
+    const s = state.byUid.get(d.session);
+    const hit = q && s ? deepHit(s, q) : null;
+    openDetail(d.session, hit ? hit.uuid : '', q && !q.startsWith('/') && !q.startsWith('#') ? q.split(/\s+/)[0] : '');
+  }
   else if (d.show) { $('proj').value = d.show; $('q').value = ''; state.sessTab = 'all'; state.shown = PAGE; renderSessions(); setView('sessions'); }
   else if (d.move) openMover([{ key: d.move, ids: null }]);
   else if (d.pick) pick(d.pick);
@@ -1615,6 +1909,30 @@ $('heat').addEventListener('click', (e) => {
   toast(`Showing chats from ${dateLabel()}`);
 });
 $('showEmpty').addEventListener('change', () => { state.shown = PAGE; renderSessions(); });
+$('deepSearch').checked = deepEnabled();
+$('deepSearch').addEventListener('change', (e) => { localStorage.setItem('csm-deep', e.target.checked ? '1' : '0'); state.deep = { q: '', hits: new Map(), busy: false }; renderSessions(); });
+$('tagFilter').addEventListener('change', () => { state.shown = PAGE; renderSessions(); });
+$('usageTool').addEventListener('change', (e) => { state.utool = e.target.value; renderUsage(); });
+$('usageChart').addEventListener('click', (e) => {
+  const bar = e.target.closest('[data-day]');
+  if (!bar) return;
+  state.src = state.utool;
+  $('q').value = '';
+  renderTools();
+  setDateFilter('custom', bar.dataset.day, bar.dataset.day);
+  setView('sessions');
+});
+document.addEventListener('keydown', async (e) => {
+  if (e.target.id !== 'tagInput' || !state.detail) return;
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const v = e.target.value.trim().toLowerCase().replace(/^#/, '').replace(/\s+/g, '-');
+    if (!v || state.detail.tags.includes(v)) { e.target.value = ''; return; }
+    if (await setTags(state.detail, [...state.detail.tags, v])) $('tagInput').focus();
+  } else if (e.key === 'Backspace' && !e.target.value && state.detail.tags.length) {
+    setTags(state.detail, state.detail.tags.slice(0, -1)).then(() => $('tagInput').focus());
+  }
+});
 $('bulkClear').addEventListener('click', () => { state.selected.clear(); renderSessions(); renderBulk(); });
 $('bulkGo').addEventListener('click', () => openMover(bulkGroups()));
 
@@ -1656,7 +1974,7 @@ document.addEventListener('keydown', (e) => {
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
   if (document.querySelector('dialog[open]')) return;
   if (gPending && Date.now() - gPending < 1200) {
-    const map = { o: 'overview', s: 'sessions', m: 'bookmarks', p: 'projects', b: 'backups' };
+    const map = { o: 'overview', s: 'sessions', m: 'bookmarks', u: 'usage', p: 'projects', b: 'backups' };
     gPending = 0;
     if (map[e.key]) { e.preventDefault(); setView(map[e.key]); }
     return;
@@ -1683,9 +2001,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ---------- start ----------
-applyTheme(localStorage.getItem('csm-theme') || 'light', false);
+applyTheme(localStorage.getItem('csm-theme') || DEFAULT_THEME, false);
 skeletons();
-loadStars();
+if (!vsc) loadStars(); // the VS Code webview only talks to the extension
 initStar();
 setView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : deepLink ? 'sessions' : 'overview');
 load();

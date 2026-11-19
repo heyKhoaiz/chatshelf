@@ -58,15 +58,21 @@ export function makeDemoHome(home) {
     const t0 = now - daysAgo * DAY - 2 * 3600e3;
     const lines = [];
     let parent = null;
-    const add = (type, content, i) => {
+    const add = (type, content, i, extra = {}) => {
       const id = uuid();
-      lines.push({ type, uuid: id, parentUuid: parent, sessionId: sid, cwd, gitBranch: 'main', timestamp: new Date(t0 + i * 60e3).toISOString(), message: { role: type, content } });
+      lines.push({ type, uuid: id, parentUuid: parent, sessionId: sid, cwd, gitBranch: 'main', timestamp: new Date(t0 + i * 60e3).toISOString(), message: { role: type, content, ...extra } });
       parent = id;
     };
+    // Made-up token counts, so the Usage page has something to show.
+    const usage = (n) => ({ model: n % 3 ? 'claude-sonnet-5-5' : 'claude-opus-5-5', id: `msg_${uuid()}`, usage: { input_tokens: 40 + n * 7, output_tokens: 600 + n * 90, cache_creation_input_tokens: 4000 + n * 300, cache_read_input_tokens: 18000 + n * 2500 } });
     let i = 0;
+    let n = daysAgo;
     for (const prompt of [first, ...more]) {
       add('user', prompt, i++);
-      add('assistant', [{ type: 'text', text: i === 1 ? reply : 'Done.' }], i++);
+      const content = [{ type: 'text', text: i === 1 ? reply : 'Done.' }];
+      // The first reply edits a file, for the "Files changed" list.
+      if (i === 1) content.push({ type: 'tool_use', id: `toolu_${uuid()}`, name: 'Edit', input: { file_path: path.join(cwd, 'src', `${proj}-${daysAgo}.ts`), old_string: 'a', new_string: 'b' } });
+      add('assistant', content, i++, usage(n++));
     }
     writeLines(path.join(home, '.claude', 'projects', encode(cwd), `${sid}.jsonl`), lines, t0 + i * 60e3);
   }
@@ -81,7 +87,10 @@ export function makeDemoHome(home) {
     { timestamp: ts(0), type: 'session_meta', payload: { id: codexId, cwd: projects['api-server'], timestamp: ts(0) } },
     { timestamp: ts(0), type: 'response_item', payload: { type: 'message', id: 'msg_1', role: 'user', content: [{ type: 'input_text', text: '# Context from my IDE setup:\n\n## Active file: src/server.ts\n\n## My request for Codex:\nAdd graceful shutdown to the server' }] } },
     { timestamp: ts(1), type: 'response_item', payload: { type: 'function_call', id: 'fc_1', name: 'exec_command', arguments: JSON.stringify({ cmd: 'rg -n "listen(" src' }) } },
+    { timestamp: ts(0), type: 'turn_context', payload: { cwd: projects['api-server'], model: 'gpt-5-codex' } },
+    { timestamp: ts(1), type: 'response_item', payload: { type: 'custom_tool_call', id: 'ct_1', name: 'apply_patch', input: '*** Begin Patch\n*** Update File: src/server.ts\n@@\n-listen()\n+listen(); onShutdown()\n*** End Patch' } },
     { timestamp: ts(2), type: 'response_item', payload: { type: 'message', id: 'msg_2', role: 'assistant', content: [{ type: 'output_text', text: 'The server now closes on SIGTERM: it stops accepting connections, waits up to 10 s for open requests, then exits.' }] } },
+    { timestamp: ts(2), type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 52000, cached_input_tokens: 38000, output_tokens: 2400, reasoning_output_tokens: 900, total_tokens: 54400 } } } },
   ], ct + 2 * 60e3);
 
   // GitHub Copilot Chat (VS Code, older .json format)
