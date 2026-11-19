@@ -1,6 +1,6 @@
 {
   "name": "chatshelf",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "One place for your AI coding chats: browse, search and bookmark Claude Code, Codex, Cursor and Copilot history, and fix Claude Code sessions after renaming a folder. Local, no dependencies.",
   "license": "MIT",
   "author": {
